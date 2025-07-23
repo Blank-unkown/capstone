@@ -1,0 +1,159 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/dashboard"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Table of Specification</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+
+<ion-content class="ion-padding">
+
+  <!-- Mode Switch Buttons -->
+  <ion-segment [(ngModel)]="viewMode">
+    <ion-segment-button value="edit">Edit</ion-segment-button>
+    <ion-segment-button value="answersheet">Answer Sheet</ion-segment-button>
+    <ion-segment-button value="print">Print</ion-segment-button>
+  </ion-segment>
+
+  <!-- 📝 Edit Mode -->
+  <div *ngIf="viewMode === 'edit'">
+    <h2>Edit TOS</h2>
+    <p><strong>Class:</strong> {{ className }} | <strong>Subject:</strong> {{ subjectName }}</p>
+  <ion-button expand="block" (click)="addTopicRow()">
+    Add New Topic
+  </ion-button>
+
+    <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Topic</th>
+        <th>Competency</th>
+        <th>No. of Days</th>
+        <th>%</th>
+        <th>No. of Items</th>
+        <th>R</th>
+        <th>U</th>
+        <th>Ap</th>
+        <th>An</th>
+        <th>Ev</th>
+        <th>Cr</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of tos">
+        <td><input [(ngModel)]="row.topicName" type="text" /></td>
+        <td><input [(ngModel)]="row.learningCompetency" type="text" /></td>
+        <td><input [(ngModel)]="row.days" type="number" /></td>
+        <td><input [(ngModel)]="row.percent" type="number" /></td>
+        <td><input [(ngModel)]="row.expectedItems" type="number" /></td>
+        <td><input [(ngModel)]="row.remembering" type="number" /></td>
+        <td><input [(ngModel)]="row.understanding" type="number" /></td>
+        <td><input [(ngModel)]="row.applying" type="number" /></td>
+        <td><input [(ngModel)]="row.analyzing" type="number" /></td>
+        <td><input [(ngModel)]="row.evaluating" type="number" /></td>
+        <td><input [(ngModel)]="row.creating" type="number" /></td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2">Total</th>
+        <td>{{ getTotal('days') }}</td>
+        <td>{{ getTotal('percent') }}</td>
+        <td>{{ getTotal('expectedItems') }}</td>
+        <td>{{ getTotal('remembering') }}</td>
+        <td>{{ getTotal('understanding') }}</td>
+        <td>{{ getTotal('applying') }}</td>
+        <td>{{ getTotal('analyzing') }}</td>
+        <td>{{ getTotal('evaluating') }}</td>
+        <td>{{ getTotal('creating') }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+
+    <ion-button expand="block" color="primary" [routerLink]="['/question-generator', classId, subjectId]">
+      Generate Questions
+    </ion-button>
+
+  </div>
+
+  <!-- 🖨️ Printable Mode -->
+  <div *ngIf="viewMode === 'print'" id="print-area" class="scroll-container print-scroll">
+    <h2 style="text-align: center;">Table of Specification (TOS)</h2>
+    <p><strong>Class:</strong> {{ className }} | <strong>Subject:</strong> {{ subjectName }}</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Topic</th>
+          <th>Competency</th>
+          <th>No. of Days</th>
+          <th>%</th>
+          <th>No. of Items</th>
+          <th>R</th>
+          <th>U</th>
+          <th>Ap</th>
+          <th>An</th>
+          <th>Ev</th>
+          <th>Cr</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of tos">
+          <td>{{ row.topicName }}</td>
+          <td>{{ row.learningCompetency }}</td>
+          <td>{{ row.days }}</td>
+          <td>{{ row.percent }}%</td>
+          <td>{{ row.expectedItems }}</td>
+          <td>{{ row.remembering }}</td>
+          <td>{{ row.understanding }}</td>
+          <td>{{ row.applying }}</td>
+          <td>{{ row.analyzing }}</td>
+          <td>{{ row.evaluating }}</td>
+          <td>{{ row.creating }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <ion-button expand="block" (click)="setMode('print')">
+      🖨️ Print TOS
+    </ion-button>
+
+  </div>
+
+  <!-- 🧾 Answer Sheet Generator Mode -->
+  <div *ngIf="viewMode === 'answersheet'">
+    <h2 style="text-align: center;">Auto-Generated Answer Sheet</h2>
+
+    <div style="
+      height: calc(100vh - 300px);
+      overflow-y: auto;
+      overflow-x: auto;
+      padding: 10px;
+      box-sizing: border-box;
+    ">
+      <app-answer-sheet-generator 
+        [classId]="classId" 
+        [subjectId]="subjectId">
+      </app-answer-sheet-generator>
+    </div>
+
+
+    <ion-button expand="block" color="tertiary"
+      [routerLink]="['/answer-key', classId, subjectId]">
+      🧠 Set Answer Key
+    </ion-button>
+
+    <ion-button expand="block" color="primary"
+      [routerLink]="['/scan']"
+      [queryParams]="{ classId: classId, subjectId: subjectId }">
+      📷 Start Scanning
+    </ion-button>
+  </div>
+
+
+</ion-content>

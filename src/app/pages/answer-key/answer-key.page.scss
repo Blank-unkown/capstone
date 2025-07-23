@@ -1,0 +1,13 @@
+ion-segment {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+
+ion-segment-button {
+  flex: 1 0 22%; // makes buttons roughly 4 in a row with spacing
+  font-size: 14px;
+  padding: 4px 0;
+}

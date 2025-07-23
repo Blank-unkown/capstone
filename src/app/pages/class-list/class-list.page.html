@@ -1,0 +1,16 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Class List</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-input [(ngModel)]="className" placeholder="Enter class name"></ion-input>
+  <ion-button expand="full" (click)="addClass()">Add Class</ion-button>
+
+  <ion-list>
+    <ion-item *ngFor="let cls of classes" (click)="goToSubjects(cls.id)">
+      {{ cls.name }}
+    </ion-item>
+  </ion-list>
+</ion-content>

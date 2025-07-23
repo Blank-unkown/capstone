@@ -1,0 +1,17 @@
+@media print {
+  ion-header, ion-toolbar, ion-button {
+    display: none !important;
+  }
+
+  #print-area {
+    visibility: visible;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #print-area, #print-area * {
+    visibility: visible;
+  }
+}

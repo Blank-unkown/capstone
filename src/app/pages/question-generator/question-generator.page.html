@@ -1,0 +1,27 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tos/{{ classId }}/{{ subjectId }}"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Generated Questions</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <h2>{{ className }} - {{ subjectName }}</h2>
+
+  <ion-list>
+    <ion-item *ngFor="let q of questions; let i = index">
+      <ion-label position="stacked">
+        <strong>Topic:</strong> {{ q.topic }}<br>
+        <strong>Competency:</strong> {{ q.competency }}<br>
+        <strong>Cognitive Level:</strong> {{ q.level }}
+      </ion-label>
+      <ion-textarea [(ngModel)]="questions[i].question"></ion-textarea>
+    </ion-item>
+  </ion-list>
+
+  <ion-button expand="block" color="success" (click)="saveQuestions()">
+    Save All Questions
+  </ion-button>
+</ion-content>

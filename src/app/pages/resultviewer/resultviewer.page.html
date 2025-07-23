@@ -1,0 +1,48 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/dashboard"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Result Details</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div *ngIf="result" id="print-area">
+    <h2>Scanned Paper</h2>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+      <img [src]="result.croppedHeader" alt="Header" style="max-width: 200px; border: 1px solid #ccc;" />
+      <img [src]="result.fullImage" alt="Full Scan" style="max-width: 500px; width: 100%;" />
+    </div>
+
+    <h3>Score: {{ result.score }} / {{ result.total }}</h3>
+    <p>Date: {{ result.date }}</p>
+
+    <h3>Answers:</h3>
+    <ol>
+      <li *ngFor="let ans of result.answers; let i = index">
+        Q{{ i + 1 }}: {{ ans || 'No answer' }}
+      </li>
+    </ol>
+
+    <div *ngIf="cognitiveBreakdown">
+      <h3>Cognitive Breakdown</h3>
+      <ion-list>
+        <ion-item *ngFor="let level of getBreakdownKeys()">
+          <ion-label>
+            {{ level }}
+            <p>{{ cognitiveBreakdown[level].correct }} / {{ cognitiveBreakdown[level].total }}</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
+      <canvas id="cognitiveChart" height="300"></canvas>
+    </div>
+
+    <ion-button expand="full" color="tertiary" (click)="printPage()">🖨️ Print Result</ion-button>
+  </div>
+
+  <div *ngIf="!result">
+    <p>Result not found.</p>
+  </div>
+</ion-content>

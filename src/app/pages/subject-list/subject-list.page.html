@@ -1,0 +1,49 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/dashboard"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Subjects</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-input [(ngModel)]="subjectName" placeholder="Enter subject name"></ion-input>
+  <ion-button expand="full" (click)="addSubject()">Add Subject</ion-button>
+
+  <ion-list>
+    <ion-item *ngFor="let sub of subjects" (click)="goToTOS(sub.id)">
+      {{ sub.name }}
+    </ion-item>
+  </ion-list>
+
+  <ion-list>
+  <ion-item *ngFor="let sub of subjects">
+    <ion-label (click)="goToTOS(sub.id)">
+      {{ sub.name }}
+    </ion-label>
+    <ion-button slot="end" fill="outline" (click)="goToScannedResults(sub.id)">
+      View Scans
+    </ion-button>
+  </ion-item>
+</ion-list>
+
+<div *ngIf="scannedResults.length > 0">
+  <h3>Scanned Papers</h3>
+  <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+    <div
+      *ngFor="let result of scannedResults"
+      (click)="viewResult(result.id, subjectId)"
+      style="cursor: pointer;"
+    >
+      <img
+        [src]="result.croppedHeader"
+        alt="Cropped Header"
+        style="width: 200px; border: 2px solid #ccc; border-radius: 5px;"
+      />
+      <p style="text-align: center;">Score: {{ result.score }}/{{ result.total }}</p>
+    </div>
+  </div>
+</div>
+
+</ion-content>

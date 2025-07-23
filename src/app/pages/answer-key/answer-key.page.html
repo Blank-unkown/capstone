@@ -1,0 +1,27 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/dashboard"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Set Answer Key</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+
+  <!-- List of answer segments -->
+  <ion-list>
+    <ion-item *ngFor="let option of answerKey; index as i; trackBy: trackByIndex">
+      <ion-label>Q{{ i + 1 }}</ion-label>
+      <ion-segment [(ngModel)]="answerKey[i]" [name]="'answer-' + i">
+        <ion-segment-button *ngFor="let opt of options" [value]="opt">
+          {{ opt }}
+        </ion-segment-button>
+      </ion-segment>
+    </ion-item>
+  </ion-list>
+
+  <ion-button expand="block" color="success" (click)="saveAnswerKey()">
+    💾 Save Answer Key
+  </ion-button>
+</ion-content>

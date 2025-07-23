@@ -1,0 +1,47 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/teacher-dashboard"></ion-back-button>
+    </ion-buttons>
+    <ion-title>SCANNER</ion-title>
+  </ion-toolbar>
+</ion-header>
+<ion-content>
+  <div style="display: flex; flex-direction: column; align-items: center; margin-top: 16px;">
+    <ion-button *ngIf="!showCamera" (click)="onStartCameraButtonClick()">Start Camera</ion-button>
+    <ion-button *ngIf="showCamera && !showCroppedImage" color="danger" (click)="reset()">Reset</ion-button>
+  </div>
+
+  <!-- Show camera preview while scanning -->
+  <div *ngIf="showCamera && !showCroppedImage" style="position: relative;">
+    <video #video autoplay playsinline></video>
+    <canvas #canvas [width]="canvasWidth" [height]="canvasHeight" style="max-width: 100%; border: 1px solid #ccc; margin-bottom: 16px;"></canvas>
+  </div>
+
+  <div *ngIf="showCroppedImage" class="result-container">
+    <h2>Cropped Document with Overlays</h2>
+    <canvas #resultCanvas [width]="canvasWidth" [height]="canvasHeight" class="scanned-image-canvas"></canvas>
+    <p *ngIf="score !== null">Score: {{ score }}</p>
+    <ion-button color="primary" style="margin-top: 16px;" (click)="reset()">Scan Another</ion-button>
+    <ion-button *ngIf="hasResults" expand="full" color="success" (click)="goToResultViewer(latestResultId!)">
+      View Result
+    </ion-button>
+  </div>
+
+
+  <!-- Show cropped image and overlays after scan -->
+   <!---
+  <div *ngIf="showCroppedImage" style="display: flex; flex-direction: column; align-items: center; margin-top: 24px;">
+    <h2>Cropped Document with Overlays</h2>
+    <canvas #resultCanvas [width]="canvasWidth" [height]="canvasHeight" style="position: absolute; left: 0; top: 0; z-index: 2; max-width: 100%; border: 1px solid #ccc; margin-bottom: 16px;"></canvas>
+    <p *ngIf="score !== null">Score: {{ score }}</p>
+    <ion-button color="primary" style="margin-top: 16px;" (click)="reset()">Scan Another</ion-button>
+    <ion-button *ngIf="hasResults" expand="full" color="success" (click)="goToResultViewer(latestResultId!)">
+      View Result
+    </ion-button>
+  </div>
+-->
+
+  <canvas id="resultsChart" width="400" height="200"></canvas>
+  <canvas id="answersChart" width="400" height="200"></canvas>
+</ion-content>
