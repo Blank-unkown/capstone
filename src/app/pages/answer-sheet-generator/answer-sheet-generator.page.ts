@@ -59,7 +59,7 @@ export class AnswerSheetGeneratorPage implements OnInit {
   const group = Math.floor(index / 10);
   const row = index % 10;
   const rowHeight = 30; // tighter rows
-  return group < 3 ? 175 + row * rowHeight : 500 + row * rowHeight;
+  return group < 3 ? 185 + row * rowHeight : 505 + row * rowHeight;
 }
 
 

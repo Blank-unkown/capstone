@@ -12,10 +12,9 @@ import { Chart } from 'chart.js';
 import { LocalDataService, ScannedResult } from '../../services/local-data.service';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions/ngx';
 import { FormsModule } from '@angular/forms';
-import { findBlackBoxContours, sortBoxesClockwise, warpToTopDown, isBubbleFilled } from '../../utils/scan-helper';
 
 declare var cv: any;
-
+  
 
 interface Question {
   questionNumber: number;
@@ -54,8 +53,7 @@ export class ScanPage implements AfterViewInit {
   canvasWidth = 800;
   canvasHeight = Math.round(800 * 1.414);
   
-  BASE_URL = 'https://examscannerbackend-production-7460.up.railway.app';
-
+latestWarpedMat: any = null;
   classId: number = 0;
   subjectId: number = 0;
   chart: Chart | undefined;
@@ -72,10 +70,10 @@ export class ScanPage implements AfterViewInit {
   score: number = 0;
   results: Result[] = [];
   detectionBoxes = [
-    { x: 0, y: 0, width: 150, height: 150 },
-    { x: 0, y: 380, width: 150, height: 150 },
-    { x: 330, y: 0, width: 150, height: 150 },
-    { x: 330, y: 380, width: 150, height: 150 }
+    { x: 0, y: 0, width: 125, height: 125 },
+    { x: 0, y: 475, width: 125, height: 125 },
+    { x: 330, y: 0, width: 125, height: 125 },
+    { x: 330, y: 475, width: 125, height: 125 }
   ];
 
   detectedContours: any;
@@ -87,7 +85,6 @@ export class ScanPage implements AfterViewInit {
   examTitle!: string;
   subject!: string;
   gradeLevel!: string;
-  teacherId: string = '1'; // Replace with actual teacher id
 
   constructor(
     private ngZone: NgZone,
@@ -116,16 +113,6 @@ export class ScanPage implements AfterViewInit {
     }).catch(err => {
       alert('Permission error: ' + err);
     });
-    // Load teacher ID from local storage (like in answer.page.ts)
-    const userData = localStorage.getItem('userData');
-    if (userData) {
-      const user = JSON.parse(userData);
-      this.teacherId = user.id;
-      alert('✅ Teacher ID loaded: ' + this.teacherId);
-    } else {
-      // Optionally handle missing user data
-      alert('No user data found in local storage.');
-    }
 
     this.route.queryParams.subscribe(params => {
     this.classId = Number(params['classId']);
@@ -147,55 +134,12 @@ export class ScanPage implements AfterViewInit {
     this.subject = params['subject'] || '';
     this.gradeLevel = params['gradeLevel'] || '';
 
-    this.getAnswerSheets();
   });
 
   }
   answerSheets: AnswerSheet[] = [];
-answerKey: { [questionNumber: number]: string } = {}; // Ensure this exists
+  answerKey: { [questionNumber: number]: string } = {}; // Ensure this exists
 
-loadAnswerSheet(id: number) {
-  this.http.get<AnswerSheet>(`${this.BASE_URL}/answer-sheets/${id}`).subscribe({
-    next: (sheet: any) => {
-      alert(`✅ Loaded answer sheet: ${sheet.exam_title}`);
-
-      // Clear existing answer key
-      this.answerKey = {};
-
-      // Load the actual answer key from the response
-      sheet.questions.forEach((q: any, index: number) => {
-        this.answerKey[q.questionNumber] = q.answer;
-      });
-
-      alert(`✅ Answer key loaded for ${sheet.questions.length} questions`);
-
-      // Draw overlay after answer key is ready
-      const ctx = this.canvasRef?.nativeElement?.getContext('2d');
-      if (ctx) {
-        this.drawBubbleOverlay(ctx);
-      }
-    },
-    error: (error: any) => {
-      alert(`❌ Error loading answer sheet: ${error.message}`);
-    }
-  });
-}
-  getAnswerSheets() {
-    if (!this.teacherId) {
-      alert('Teacher not logged in.');
-      return;
-    }
-  
-    this.http.get(`${this.BASE_URL}/answer-sheets?teacher_id=${this.teacherId}`).subscribe(
-      (response: any) => {
-        alert("✅ Fetched answer sheets: " + JSON.stringify(response));
-        this.answerSheets = response;
-      },
-      (error: any) => {
-        alert("❌ Error fetching answer sheets: " + error.message);
-      }
-    );
-  }
 
   goToResultViewer() {
     this.router.navigate(['/resultviewer'], {
@@ -294,7 +238,7 @@ loadAnswerSheet(id: number) {
         const hierarchy = new cv.Mat();
 
     const FPS = 10;
-    let stopped = false; // <-- Move this line outside the process() function
+    let stopped = false;
 
     const process = () => {
       if (stopped) return;
@@ -322,7 +266,7 @@ loadAnswerSheet(id: number) {
         const approx = new cv.Mat();
         cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
 
-        if (approx.rows === 4 && cv.contourArea(approx) > 250 && cv.isContourConvex(approx)) {
+        if (approx.rows === 4 && cv.contourArea(approx) > 100 && cv.isContourConvex(approx) < 200) {
           const rect = cv.boundingRect(approx);
 
           this.detectionBoxes.forEach((box, idx) => {
@@ -481,12 +425,41 @@ loadAnswerSheet(id: number) {
         const dst = new cv.Mat();
         const dsize = new cv.Size(FIXED_WIDTH, FIXED_HEIGHT);
         cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+        this.latestWarpedMat = dst.clone(); // 👈 Add this line
+
 
         // Draw result on canvas
         canvas.width = FIXED_WIDTH;
         canvas.height = FIXED_HEIGHT;
         cv.imshow(canvas, dst);
+                
+        // 🆕 STEP: Crop the header from the warped image
+        const HEADER_HEIGHT = 250; // You can adjust this
+        const headerMat = dst.roi(new cv.Rect(0, 0, dst.cols, HEADER_HEIGHT));
 
+        // Convert to base64 using temporary canvas
+        const headerCanvas = document.createElement('canvas');
+        headerCanvas.width = headerMat.cols;
+        headerCanvas.height = headerMat.rows;
+        cv.imshow(headerCanvas, headerMat);
+        this.croppedHeaderBase64 = headerCanvas.toDataURL('image/jpeg');
+
+        // Optional debug
+        alert('🧠 Header cropped & saved to base64. Length: ' + this.croppedHeaderBase64.length);
+
+        // Now store full scan data locally (you may want to move this to a saveResult() method later)
+        const scanData = {
+          id: Date.now(), // or uuid
+          headerImage: this.croppedHeaderBase64,
+          fullImage: canvas.toDataURL('image/jpeg'),
+          answers: this.results,
+          score: this.score,
+          total: this.total,
+          subjectId: this.subjectId,
+          classId: this.classId,
+          timestamp: new Date().toISOString()
+        };
+        localStorage.setItem('scan_' + scanData.id, JSON.stringify(scanData));
         // Get the context again after imshow
         
         const overlayCtx = canvas.getContext('2d');
@@ -574,30 +547,38 @@ loadAnswerSheet(id: number) {
       }
     }
   }
-    isBubbleFilled(ctx: CanvasRenderingContext2D, bubble: BubbleTemplate, option: Option): boolean {
-        const { cx, cy, radius } = bubble.options[option] as BubbleCoordinate;
-        const imageData = ctx.getImageData(cx - radius, cy - radius, radius * 2, radius * 2);
-        const gray = new cv.Mat(imageData.height, imageData.width, cv.CV_8UC1);
-        cv.cvtColor(cv.matFromImageData(imageData), gray, cv.COLOR_RGBA2GRAY);
-    
-        const THRESHOLD_DARKNESS = 150;  // below this = dark
-        const FILL_PERCENT = 0.5;        // >50% dark = filled
-        let darkPixels = 0;
-    
-        for (let i = 0; i < gray.rows; i++) {
-            for (let j = 0; j < gray.cols; j++) {
-                const pixel = gray.ucharPtr(i, j)[0]; // Grayscale value
-                if (pixel < THRESHOLD_DARKNESS) {
-                    darkPixels++;
-                }
-            }
-          }
-    
-        const totalPixels = gray.rows * gray.cols;
-        gray.delete();
-    
-        return (darkPixels / totalPixels) > FILL_PERCENT;
-    
+    isBubbleFilled(bubble: BubbleTemplate, option: Option, dst: any): boolean {
+  const { cx, cy, radius } = bubble.options[option];
+
+  // Crop region from the warped OpenCV image (dst)
+  const x = Math.max(cx - radius, 0);
+  const y = Math.max(cy - radius, 0);
+  const size = Math.min(radius * 2, dst.cols - x, dst.rows - y);
+
+  const roi = dst.roi(new cv.Rect(x, y, size, size));
+
+  // Convert to grayscale and threshold
+  const gray = new cv.Mat();
+  cv.cvtColor(roi, gray, cv.COLOR_RGBA2GRAY);
+
+  const THRESHOLD_DARKNESS = 180;
+  const FILL_PERCENT = 0.3;
+
+  let darkPixels = 0;
+  for (let i = 0; i < gray.rows; i++) {
+    for (let j = 0; j < gray.cols; j++) {
+      const pixel = gray.ucharPtr(i, j)[0];
+      if (pixel < THRESHOLD_DARKNESS) {
+        darkPixels++;
+      }
+    }
+  }
+
+  const totalPixels = gray.rows * gray.cols;
+  gray.delete();
+  roi.delete();
+
+  return (darkPixels / totalPixels) > FILL_PERCENT;
     }
     processSheet(ctx: CanvasRenderingContext2D) {
       this.detectedAnswers = {};
@@ -612,7 +593,7 @@ loadAnswerSheet(id: number) {
     
         for (const opt in bubble.options) {
           const option = opt as Option;
-          if (this.isBubbleFilled(ctx, bubble, option)) {
+          if (this.isBubbleFilled(bubble, option, this.latestWarpedMat)) {
             filledCount++;
             selected = option;
           }

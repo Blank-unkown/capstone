@@ -28,22 +28,12 @@
   </ion-item>
 </ion-list>
 
-<div *ngIf="scannedResults.length > 0">
-  <h3>Scanned Papers</h3>
-  <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-    <div
-      *ngFor="let result of scannedResults"
-      (click)="viewResult(result.id, subjectId)"
-      style="cursor: pointer;"
-    >
-      <img
-        [src]="result.croppedHeader"
-        alt="Cropped Header"
-        style="width: 200px; border: 2px solid #ccc; border-radius: 5px;"
-      />
-      <p style="text-align: center;">Score: {{ result.score }}/{{ result.total }}</p>
-    </div>
-  </div>
-</div>
+<ion-card *ngFor="let scan of scanResults" (click)="viewScan(scan)">
+  <img [src]="scan.headerImage" style="width: 100%; height: auto;" />
+  <ion-card-header>
+    <ion-card-title>Score: {{ scan.score }}/{{ scan.total }}</ion-card-title>
+    <ion-card-subtitle>{{ scan.timestamp | date: 'short' }}</ion-card-subtitle>
+  </ion-card-header>
+</ion-card>
 
 </ion-content>

@@ -11,12 +11,12 @@
   <div *ngIf="result" id="print-area">
     <h2>Scanned Paper</h2>
     <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-      <img [src]="result.croppedHeader" alt="Header" style="max-width: 200px; border: 1px solid #ccc;" />
+      <img [src]="result.headerImage" alt="Header" style="max-width: 200px; border: 1px solid #ccc;" />
       <img [src]="result.fullImage" alt="Full Scan" style="max-width: 500px; width: 100%;" />
     </div>
 
     <h3>Score: {{ result.score }} / {{ result.total }}</h3>
-    <p>Date: {{ result.date }}</p>
+    <p>Date: {{ result.timestamp | date: 'short' }}</p>
 
     <h3>Answers:</h3>
     <ol>

@@ -22,6 +22,12 @@ export class ResultviewerPage implements OnInit, AfterViewInit {
   constructor(private route: ActivatedRoute) {}
 
   ngOnInit() {
+  const stateResult = history.state?.resultData;
+
+  if (stateResult) {
+    this.result = stateResult;
+    this.generateCognitiveBreakdown();
+  } else {
     this.route.queryParams.subscribe(params => {
       this.classId = +params['classId'];
       this.subjectId = +params['subjectId'];
@@ -35,6 +41,8 @@ export class ResultviewerPage implements OnInit, AfterViewInit {
       }
     });
   }
+}
+
 
   ngAfterViewInit() {
     setTimeout(() => {

@@ -18,7 +18,7 @@ export class SubjectListPage implements OnInit {
   subjectId!: number;
   subjects: Subject[] = [];
   subjectName = '';
-  scannedResults: ScannedResult[] = [];
+  scanResults: any[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -45,16 +45,34 @@ export class SubjectListPage implements OnInit {
     this.navCtrl.navigateForward(`/tos/${this.classId}/${subjectId}`);
   }
 
-  goToScannedResults(subjectId: number) {
-  const subject = LocalDataService.getSubject(this.classId, subjectId);
-  if (!subject || !subject.results?.length) {
-    alert('No scanned results found.');
-    return;
+goToScannedResults(subjectId: number) {
+  this.scanResults = [];
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('scan_')) {
+      const data = JSON.parse(localStorage.getItem(key)!);
+
+      // Filter by selected subject only
+      if (data.subjectId === subjectId && data.classId === this.classId) {
+        this.scanResults.push(data);
+      }
+    }
   }
-  this.scannedResults = subject.results;
-  this.subjectId = subjectId; // ✅ Needed for HTML binding
+
+  this.subjectId = subjectId;
+
+  if (this.scanResults.length === 0) {
+    alert('No scanned results found for this subject.');
+  }
 }
 
+
+viewScan(scan: any) {
+  this.router.navigate(['/resultviewer'], {
+    state: { resultData: scan }
+  });
+}
 
   viewResult(resultId: number, subjectId: number) {
     this.router.navigate(['/resultviewer'], {

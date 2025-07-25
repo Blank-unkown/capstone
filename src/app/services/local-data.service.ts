@@ -14,15 +14,19 @@ export interface TopicEntry {
   creating?: number;
 }
 
+
 export interface ScannedResult {
   id: number;
-  croppedHeader: string;
+  headerImage: string; // ✅ Add this line
   fullImage: string;
   answers: string[];
   score: number;
   total: number;
-  date: string;
+  subjectId: number;
+  classId: number;
+  timestamp: string;
 }
+
 
 export interface Subject {
   id: number;

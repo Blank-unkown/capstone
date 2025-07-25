@@ -18,6 +18,7 @@
     <canvas #canvas [width]="canvasWidth" [height]="canvasHeight" style="max-width: 100%; border: 1px solid #ccc; margin-bottom: 16px;"></canvas>
   </div>
 
+  <!--
   <div *ngIf="showCroppedImage" class="result-container">
     <h2>Cropped Document with Overlays</h2>
     <canvas #resultCanvas [width]="canvasWidth" [height]="canvasHeight" class="scanned-image-canvas"></canvas>
@@ -26,21 +27,20 @@
     <ion-button *ngIf="hasResults" expand="full" color="success" (click)="goToResultViewer(latestResultId!)">
       View Result
     </ion-button>
-  </div>
+  </div>-->
 
 
   <!-- Show cropped image and overlays after scan -->
-   <!---
   <div *ngIf="showCroppedImage" style="display: flex; flex-direction: column; align-items: center; margin-top: 24px;">
     <h2>Cropped Document with Overlays</h2>
     <canvas #resultCanvas [width]="canvasWidth" [height]="canvasHeight" style="position: absolute; left: 0; top: 0; z-index: 2; max-width: 100%; border: 1px solid #ccc; margin-bottom: 16px;"></canvas>
     <p *ngIf="score !== null">Score: {{ score }}</p>
     <ion-button color="primary" style="margin-top: 16px;" (click)="reset()">Scan Another</ion-button>
-    <ion-button *ngIf="hasResults" expand="full" color="success" (click)="goToResultViewer(latestResultId!)">
+    <ion-button *ngIf="hasResults" expand="full" color="success" (click)="goToResultViewer()"> 
       View Result
     </ion-button>
   </div>
--->
+
 
   <canvas id="resultsChart" width="400" height="200"></canvas>
   <canvas id="answersChart" width="400" height="200"></canvas>
