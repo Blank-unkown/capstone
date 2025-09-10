@@ -25,6 +25,8 @@ app.use("/subjects", scansRouter);       // /subjects/:classId/:subjectId/scans
 app.use("/scans", scanAnswersRouter);    // /scans/:scanId/scan-answers
 app.use("/subjects", subjectResultsRouter);
 // ✅ Start server
-app.listen(3000, () => {
-  console.log("✅ Server running on http://localhost:3000");
+// ✅ Use Render’s PORT (or default to 3000 locally)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
