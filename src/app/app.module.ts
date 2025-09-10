@@ -1,16 +1,16 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { RouteReuseStrategy } from '@angular/router';
-import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions/ngx';
 import { IonicModule, IonicRouteStrategy } from '@ionic/angular';
-
-import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
+import { HttpClientModule } from '@angular/common/http';
+import { AuthService } from './services/auth.service'; // Adjust based on your actual file structure
 
 @NgModule({
-  declarations: [AppComponent],
-  imports: [BrowserModule, IonicModule.forRoot(), AppRoutingModule],
-  providers: [AndroidPermissions,{ provide: RouteReuseStrategy, useClass: IonicRouteStrategy }],
-  bootstrap: [AppComponent],
+  declarations: [AppComponent], // ✅ Make sure AppComponent is here
+  imports: [BrowserModule, IonicModule.forRoot(), AppRoutingModule,  HttpClientModule ],
+  providers: [ AuthService, { provide: RouteReuseStrategy, useClass: IonicRouteStrategy }],
+  bootstrap: [AppComponent], // ✅ Ensure AppComponent is bootstrapped
 })
 export class AppModule {}

@@ -7,7 +7,6 @@
   </ion-toolbar>
 </ion-header>
 
-
 <ion-content class="ion-padding">
 
   <!-- Mode Switch Buttons -->
@@ -21,64 +20,85 @@
   <div *ngIf="viewMode === 'edit'">
     <h2>Edit TOS</h2>
     <p><strong>Class:</strong> {{ className }} | <strong>Subject:</strong> {{ subjectName }}</p>
-  <ion-button expand="block" (click)="addTopicRow()">
-    Add New Topic
-  </ion-button>
+
+    <ion-button expand="block" (click)="addTopicRow()">
+      Add New Topic
+    </ion-button>
+
+    <ion-button expand="block" color="success" (click)="saveAllNewTopics()" *ngIf="hasNewTopics">
+      💾 Save All New Topics
+    </ion-button>
 
     <div class="table-scroll">
-  <table>
-    <thead>
-      <tr>
-        <th>Topic</th>
-        <th>Competency</th>
-        <th>No. of Days</th>
-        <th>%</th>
-        <th>No. of Items</th>
-        <th>R</th>
-        <th>U</th>
-        <th>Ap</th>
-        <th>An</th>
-        <th>Ev</th>
-        <th>Cr</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let row of tos">
-        <td><input [(ngModel)]="row.topicName" type="text" /></td>
-        <td><input [(ngModel)]="row.learningCompetency" type="text" /></td>
-        <td><input [(ngModel)]="row.days" type="number" /></td>
-        <td><input [(ngModel)]="row.percent" type="number" /></td>
-        <td><input [(ngModel)]="row.expectedItems" type="number" /></td>
-        <td><input [(ngModel)]="row.remembering" type="number" /></td>
-        <td><input [(ngModel)]="row.understanding" type="number" /></td>
-        <td><input [(ngModel)]="row.applying" type="number" /></td>
-        <td><input [(ngModel)]="row.analyzing" type="number" /></td>
-        <td><input [(ngModel)]="row.evaluating" type="number" /></td>
-        <td><input [(ngModel)]="row.creating" type="number" /></td>
-      </tr>
-    </tbody>
-    <tfoot>
-      <tr>
-        <th colspan="2">Total</th>
-        <td>{{ getTotal('days') }}</td>
-        <td>{{ getTotal('percent') }}</td>
-        <td>{{ getTotal('expectedItems') }}</td>
-        <td>{{ getTotal('remembering') }}</td>
-        <td>{{ getTotal('understanding') }}</td>
-        <td>{{ getTotal('applying') }}</td>
-        <td>{{ getTotal('analyzing') }}</td>
-        <td>{{ getTotal('evaluating') }}</td>
-        <td>{{ getTotal('creating') }}</td>
-      </tr>
-    </tfoot>
-  </table>
-</div>
-
+      <table>
+        <thead>
+          <tr>
+            <th>Topic</th>
+            <th>Competency</th>
+            <th>No. of Days</th>
+            <th>%</th>
+            <th>No. of Items</th>
+            <th>R</th>
+            <th>U</th>
+            <th>Ap</th>
+            <th>An</th>
+            <th>Ev</th>
+            <th>Cr</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of tos">
+            <td><input [(ngModel)]="row.topicName" type="text"  (ngModelChange)="markDirty(row)" /></td>
+            <td><input [(ngModel)]="row.learningCompetency" type="text" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.days" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.percent" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.expectedItems" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.remembering" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.understanding" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.applying" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.analyzing" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.evaluating" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td><input [(ngModel)]="row.creating" type="number" (ngModelChange)="markDirty(row)"/></td>
+            <td>
+             <!-- Save button for new rows -->
+              <ion-button size="small" color="primary" (click)="saveTopic(row)" *ngIf="row.isNew">
+                💾 Save
+              </ion-button>
+              <!-- Update button for existing rows -->
+              <ion-button size="small" color="primary" (click)="saveTopic(row)" *ngIf="!row.isNew && row.isDirty">
+                💾 Update
+              </ion-button>
+              <!-- Delete button -->
+              <ion-button size="small" color="danger" (click)="deleteTopic(row)">
+                🗑️ Delete
+              </ion-button>
+              <!-- Saved indicator for clean rows -->
+              <span *ngIf="!row.isNew && !row.isDirty">✔️ Saved</span>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colspan="2">Total</th>
+            <td>{{ getTotal('days') }}</td>
+            <td>{{ getTotal('percent') }}</td>
+            <td>{{ getTotal('expectedItems') }}</td>
+            <td>{{ getTotal('remembering') }}</td>
+            <td>{{ getTotal('understanding') }}</td>
+            <td>{{ getTotal('applying') }}</td>
+            <td>{{ getTotal('analyzing') }}</td>
+            <td>{{ getTotal('evaluating') }}</td>
+            <td>{{ getTotal('creating') }}</td>
+            <th></th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
 
     <ion-button expand="block" color="primary" [routerLink]="['/question-generator', classId, subjectId]">
       Generate Questions
     </ion-button>
-
   </div>
 
   <!-- 🖨️ Printable Mode -->
@@ -122,7 +142,6 @@
     <ion-button expand="block" (click)="setMode('print')">
       🖨️ Print TOS
     </ion-button>
-
   </div>
 
   <!-- 🧾 Answer Sheet Generator Mode -->
@@ -138,6 +157,7 @@
       [queryParams]="{ classId: classId, subjectId: subjectId }">
       📷 Start Scanning
     </ion-button>
+
     <div style="
       height: calc(100vh - 300px);
       overflow-y: auto;

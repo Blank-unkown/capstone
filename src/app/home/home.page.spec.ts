@@ -2,6 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { IonicModule } from '@ionic/angular';
 
 import { HomePage } from './home.page';
+import { describe, beforeEach, it } from 'node:test';
+import 'jasmine';
+
 
 describe('HomePage', () => {
   let component: HomePage;

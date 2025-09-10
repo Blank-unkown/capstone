@@ -2,14 +2,15 @@ import { Component, OnInit, Input } from '@angular/core';
 import { NavController, ToastController, LoadingController, IonicModule } from '@ionic/angular';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { LocalDataService, TopicEntry } from '../../services/local-data.service';
+import { TopicEntry } from '../../services/local-data.service';
+import { TosService } from '../../services/tos.service';
 import { ActivatedRoute } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { FileOpener } from '@capacitor-community/file-opener';
 import { Share } from '@capacitor/share';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { SchoolService } from '../../services/school.service';
 
 @Component({
   selector: 'app-answer-sheet-generator',
@@ -26,29 +27,52 @@ export class AnswerSheetGeneratorPage implements OnInit {
   totalQuestions = 0;
   className = '';
   subjectName = '';
-  pdfContent: string | null = null; // <-- add this
+  pdfContent: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
     private toastController: ToastController,
-    private loadingController: LoadingController
+    private loadingController: LoadingController,
+    private schoolService: SchoolService,
+    private tosService: TosService
   ) {}
 
   ngOnInit() {
     this.classId = Number(this.route.snapshot.paramMap.get('classId'));
     this.subjectId = Number(this.route.snapshot.paramMap.get('subjectId'));
 
-    const cls = LocalDataService.getClass(this.classId);
-    const subject = LocalDataService.getSubject(this.classId, this.subjectId);
+    // Load class name
+    this.schoolService.getClassById(this.classId).subscribe(cls => {
+      if (cls) this.className = cls.name;
+    });
 
-    this.className = cls?.name || '';
-    this.subjectName = subject?.name || '';
-    this.tos = subject?.tos || [];
-    this.totalQuestions = this.tos.reduce(
-      (sum, topic) => sum + Number(topic.expectedItems || 0),
-      0
-    );
+    // Load subject name
+    this.schoolService.getSubjectById(this.classId, this.subjectId).subscribe(sub => {
+      if (sub) this.subjectName = sub.name;
+    });
+
+    // In ngOnInit()
+    this.tosService.getTOS(this.classId, this.subjectId).subscribe(tos => {
+      this.tos = tos || [];
+      this.totalQuestions = this.tos.reduce(
+        (sum, topic) => sum + Number(topic.expectedItems || 0),
+        0
+      );
+    });
+
   }
+
+    //const cls = LocalDataService.getClass(this.classId);
+    //const subject = LocalDataService.getSubject(this.classId, this.subjectId);
+
+    //this.className = cls?.name || '';
+    //this.subjectName = subject?.name || '';
+    //this.tos = subject?.tos || [];
+    //this.totalQuestions = this.tos.reduce(
+      //(sum, topic) => sum + Number(topic.expectedItems || 0),
+      //0
+    //);
+  //}
 
   getX(index: number): number {
     const group = Math.floor(index / 10);

@@ -25,7 +25,6 @@ export interface AnswerEntry {
   level?: string | null;        // 🔹 Bloom’s level
 }
 
-
 export interface ScannedResult {
   id: number;
   headerImage: string;
@@ -69,11 +68,10 @@ export interface Class {
   name: string;
   subjects: Subject[];
 }
-
 export class LocalDataService {
   private static classes: Class[] = [];
 
-  // Load from storage into memory
+  // ---------- Load & Save ----------
   static async load(): Promise<void> {
     const stored = await Preferences.get({ key: 'examData' });
     if (stored.value) {
@@ -87,6 +85,7 @@ export class LocalDataService {
     await Preferences.set({ key: 'examData', value: JSON.stringify(this.classes) });
   }
 
+  // ---------- Classes ----------
   static getClasses(): Class[] {
     return this.classes;
   }
@@ -98,25 +97,31 @@ export class LocalDataService {
       subjects: []
     };
     this.classes.push(newClass);
+    this.save();
   }
 
   static getClass(id: number): Class | undefined {
     return this.classes.find(cls => cls.id === id);
   }
- // 🔹 Delete Class by ID
+
+  static updateClass(id: number, name: string) {
+    const cls = this.getClass(id);
+    if (cls) {
+      cls.name = name;
+      this.save();
+    }
+  }
+
   static deleteClass(classId: number) {
     this.classes = this.classes.filter(cls => cls.id !== classId);
     this.save();
   }
 
-  // 🔹 Delete Subject by ID inside a Class
-  static deleteSubject(classId: number, subjectId: number) {
-    const cls = this.getClass(classId);
-    if (cls) {
-      cls.subjects = cls.subjects.filter(sub => sub.id !== subjectId);
-      this.save();
-    }
+  // ---------- Subjects ----------
+  static getSubject(classId: number, subjectId: number): Subject | undefined {
+    return this.getClass(classId)?.subjects.find(sub => sub.id === subjectId);
   }
+
   static addSubject(classId: number, subjectName: string) {
     const cls = this.getClass(classId);
     if (cls) {
@@ -125,15 +130,33 @@ export class LocalDataService {
         name: subjectName,
         tos: [],
         questions: [],
-        answerKey: []
+        answerKey: [],
+        results: []
       };
       cls.subjects.push(newSubject);
+      this.save();
     }
   }
 
-  static getSubject(classId: number, subjectId: number): Subject | undefined {
-    return this.getClass(classId)?.subjects.find(sub => sub.id === subjectId);
+  static updateSubject(classId: number, subjectId: number, newName: string) {
+    const cls = this.getClass(classId);
+    if (cls) {
+      const subj = cls.subjects.find(sub => sub.id === subjectId);
+      if (subj) {
+        subj.name = newName;
+        this.save();
+      }
+    }
   }
+
+  static deleteSubject(classId: number, subjectId: number) {
+    const cls = this.getClass(classId);
+    if (cls) {
+      cls.subjects = cls.subjects.filter(sub => sub.id !== subjectId);
+      this.save();
+    }
+  }
+
 
   static saveTOS(classId: number, subjectId: number, tos: TopicEntry[]) {
     const subject = this.getSubject(classId, subjectId);
@@ -197,7 +220,6 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
       }
     });
   });
-
   return rows;
 }
 
@@ -254,4 +276,3 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
     return breakdown;
   }
 }
-

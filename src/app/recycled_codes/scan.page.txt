@@ -9,45 +9,16 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClient } from '@angular/common/http';
 import { NavController } from '@ionic/angular';
 import { Chart } from 'chart.js';
+import { LocalDataService, ScannedResult } from '../../services/local-data.service';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions/ngx';
 import { FormsModule } from '@angular/forms';
 import { CameraService } from '../../services/camera.service';
 import { PreloaderService } from '../../services/preloader.service';
 import jsQR from 'jsqr';
-import { ScanService } from '../../services/scan.service';
-import { ScanAnswerService } from '../../services/scanAnswer.service';
-
 
 declare var cv: any;
 declare const Tesseract: any;
-export interface ScannedResult {
-  id: number;
-  headerImage: string;
-  fullImage: string;
-  answers: AnswerEntry[];
-  score: number;
-  total: number;
-  subjectId: number;
-  classId: number;
-  timestamp: string;
-  answerDistribution: Record<'A'|'B'|'C'|'D', number>;
-  cognitiveBreakdown: { [level: string]: { correct: number; total: number } };
-  // ✅ new field: snapshot of TOS rows
-  tosRows: TopicEntry[];
-}
-export interface TopicEntry {
-  topicName: string;
-  learningCompetency: string;
-  days: number;
-  percent: number;
-  expectedItems?: number;
-  remembering?: number;
-  understanding?: number;
-  applying?: number;
-  analyzing?: number;
-  evaluating?: number;
-  creating?: number;
-}
+
 interface Question {
   questionNumber: number;
   answer: 'A' | 'B' | 'C' | 'D';
@@ -79,6 +50,7 @@ export interface AnswerEntry {
   competency?: string | null;
   level?: string | null;
 }
+
 
 function isOption(value: string | null): value is Option {
   return value === 'A' || value === 'B' || value === 'C' || value === 'D';
@@ -144,8 +116,6 @@ export class ScanPage implements AfterViewInit {
   canvasWidth = 800;
   canvasHeight = Math.round(800 * 1.414);
 
-  // Inside ScanPage class
-  latestResult: ScannedResult | null = null;
   latestResultId: number | null = null; // or string, depending on how you save IDs
   latestWarpedMat: any = null;
   classId: number = 0;
@@ -180,7 +150,7 @@ export class ScanPage implements AfterViewInit {
   subject!: string;
   gradeLevel!: string;
   cvInitialized = false;
-  tosRows: any[] = [];
+
   answerSheets: AnswerSheet[] = [];
   answerKey: { [questionNumber: number]: string } = {};
 
@@ -197,55 +167,34 @@ export class ScanPage implements AfterViewInit {
     private route: ActivatedRoute,
     private androidPermissions: AndroidPermissions,
     private cameraService: CameraService,
-    private preloader: PreloaderService,
-    private scanService: ScanService,           // ✅ new
-    private scanAnswerService: ScanAnswerService, // ✅ new
+    private preloader: PreloaderService
   ) {}
 
   async ngAfterViewInit() {
       await this.waitForVideoElement();
+
       // Load OpenCV
       await this.waitForOpenCV();
+            
       // Load answer key from params
       this.route.queryParams.subscribe(params => {
         this.classId = Number(params['classId']);
         this.subjectId = Number(params['subjectId']);
-        this.scanService.getScans(this.classId, this.subjectId).subscribe({
-          next: (scans) => {
-            // You could preload scans if needed
-            console.log("✅ Loaded scans:", scans);
-          },
-          error: (err) => {
-            console.error("❌ Failed to load scans", err);
-          }
-        })
-        this.http.get<any[]>(`http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`).subscribe({
-          next: (tos: any[]) => {
-            this.tosRows = tos;
-          },
-          error: (err) => {
-            console.error("❌ Failed to load TOS", err);
-            this.tosRows = [];
-          }
+        const subject = LocalDataService.getSubject(this.classId, this.subjectId);
+        if (!subject || !subject.answerKey) {
+          alert('❌ No answer key found for this subject!');
+          return;
+        }
+        this.answerKey = {};
+        subject.answerKey.forEach((ans: string, idx: number) => {
+          this.answerKey[idx + 1] = ans;
         });
-        // Load answer key via backend (instead of LocalDataService)
-        this.http.get<string[]>(`http://localhost:3000/subjects/${this.classId}/${this.subjectId}/answer-key`).subscribe({
-          next: (answerKey: string[]) => {
-            this.answerKey = {};
-            answerKey.forEach((ans, idx) => {
-              this.answerKey[idx + 1] = ans;
-            });
-            this.total = answerKey.length;
-          },
-          error: (err) => {
-            console.error("❌ Failed to load answer key", err);
-            alert('❌ No answer key found for this subject!');
-          }
-        });
+        this.total = subject.answerKey.length;
         this.examTitle = params['examTitle'] || '';
         this.subject = params['subject'] || '';
         this.gradeLevel = params['gradeLevel'] || '';
       });
+          
       // ✅ Start camera only once here
       this.onStartCameraButtonClick();
     }
@@ -302,27 +251,38 @@ private initOpenCVMatsAndCapture(videoEl: HTMLVideoElement) {
     console.error('Camera error:', err);
     alert('Error accessing camera: ' + err.message);
   });
-  }
-    
-  goToResultViewer(result?: ScannedResult | null) {
-  const payload = result ?? this.latestResult;
-  if (!payload) return;
-  this.router.navigate(['/resultviewer'], {
-    state: { resultData: payload }
-  });
 }
-  reset() {
-    this.showCamera = false;
-    this.showCroppedImage = false;
-    this.croppedImageUrl = null;
-    this.showDetectionBoxes = true; // re-enable boxes for next scan
-    if (this.videoRef?.nativeElement?.srcObject) {
-      const stream = this.videoRef.nativeElement.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      this.videoRef.nativeElement.srcObject = null;
+
+  goToResultViewer() {
+    this.router.navigate(['/resultviewer'], {
+    state: {
+      resultData: {
+        score: this.score,
+        total: this.total,
+        percentage: (this.total > 0 ? (this.score / this.total) * 100 : 0),
+        answers: this.results.map(r => ({
+          number: r.question,
+          selected: r.marked,
+          correctAnswer: r.correctAnswer,
+          correct: r.correct,
+          blank: r.marked === null
+        }))
+      }
     }
+  });
   }
 
+      reset() {
+      this.showCamera = false;
+      this.showCroppedImage = false;
+      this.croppedImageUrl = null;
+      this.showDetectionBoxes = true; // re-enable boxes for next scan
+      if (this.videoRef?.nativeElement?.srcObject) {
+        const stream = this.videoRef.nativeElement.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        this.videoRef.nativeElement.srcObject = null;
+      }
+    }
 
   // New flag at the top of your scan.page.ts
   showDetectionBoxes: boolean = true;
@@ -598,44 +558,53 @@ async detectAndCropPaper() {
 
     log('Header cropped & saved, length:', this.croppedHeaderBase64?.length ?? 0);
 
-    // ✅ Process sheet visually
+    // Process sheet (now has access to latestWarpedMat)
     const overlayCtx = canvas.getContext('2d');
-    let result: ScannedResult | null = null;
     if (overlayCtx) {
       try {
         log('step=processSheet');
-        result = await this.processSheet();  // draws overlay rings, calculates score, sets this.score etc.
-
-        // Draw score overlay
-        overlayCtx.font = 'bold 32px Arial';
-        overlayCtx.fillStyle = 'black';
-        overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
-
-        // Navigate to ResultViewer if defined
-        if (typeof this.goToResultViewer === 'function') {
-          this.goToResultViewer(result);
-        }
-
+        this.processSheet(overlayCtx);
       } catch (err) {
         log('processSheet error:', err);
       }
+
+      // Score text
+      overlayCtx.font = 'bold 32px Arial';
+      overlayCtx.fillStyle = 'black';
+      overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
+
+      // Optionally navigate after drawing
+      if (typeof this.goToResultViewer === 'function') {
+        this.goToResultViewer();
+      }
+    } else {
+      log('No overlayCtx after warp');
     }
 
-    // ✅ Save to backend
-    if (result) {
-      this.scanService.createScan(this.classId, this.subjectId, result).subscribe({
-        next: (scanRes: any) => {
-          log('Scan saved to backend, id=' + scanRes.id);
-          this.scanAnswerService.saveAnswers(scanRes.id, result.answers).subscribe({
-            next: () => log('Answers saved successfully'),
-            error: e => log('Failed to save answers', e)
-          });
-        },
-        error: e => log('Failed to create scan', e)
-      });
-    }
+    // ✅ Save scan data AFTER processing sheet
+    const safeResults = Array.isArray(this.results)
+      ? this.results.map(r => ({
+          question: r.question,
+          marked: r.marked ? String(r.marked) : null,
+          correctAnswer: r.correctAnswer ? String(r.correctAnswer) : null,
+          correct: r.correct
+        }))
+      : [];
 
-    // ✅ Cleanup Mats
+    const scanData = {
+      id: Date.now(),
+      headerImage: this.croppedHeaderBase64,
+      fullImage: canvas.toDataURL('image/jpeg'),
+      answers: safeResults,
+      score: this.score ?? null,
+      total: this.total ?? null,
+      subjectId: this.subjectId ?? null,
+      classId: this.classId ?? null,
+      timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('scan_' + scanData.id, JSON.stringify(scanData));
+
+    // ✅ Cleanup
     src.delete();
     dst.delete();
     srcPoints.delete();
@@ -643,9 +612,8 @@ async detectAndCropPaper() {
     M.delete();
 
     log('step=done');
-    return result;
-
   } catch (err: any) {
+    // Show the real error message instead of {}
     const msg = (err && err.message) ? `${err.name || 'Error'}: ${err.message}` : String(err);
     log('Error in detectAndCropPaper:', msg);
     console.error(err);
@@ -655,73 +623,16 @@ async detectAndCropPaper() {
       this.croppedImageUrl = null;
       this.hasResults = false;
     });
-
-    return null;
   }
 }
-// 🔹 Main handler after scanning
-async handleScanComplete() {
-  const result = await this.processSheet();
-  if (!result) {
-    console.warn("⚠️ processSheet returned null, skipping.");
+
+processSheet(ctx: CanvasRenderingContext2D) {
+  if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
+    alert("⚠️ processSheet: No warpedMat available.");
     return;
   }
 
-  try {
-    // 1. Save scan to backend
-    await this.saveScanToBackend(result);
-
-    // 2. Navigate to result viewer with result object
-    this.goToResultViewer(result);
-  } catch (err) {
-    console.error("❌ Failed to save scan", err);
-    alert("Failed to save scan to backend.");
-  }
-}
-
-// 🔹 Save scanned result to backend
-async saveScanToBackend(result: ScannedResult) {
-  const safeResults = result.answers.map(r => ({
-    question: r.question,
-    marked: r.marked ? String(r.marked) : null,
-    correctAnswer: r.correctAnswer ? String(r.correctAnswer) : null,
-    correct: r.correct,
-    topic: r.topic || null,
-    competency: r.competency || null,
-    level: r.level || null
-  }));
-
-  const scanData = {
-    exam_title: this.examTitle || 'Untitled Exam',
-    grade_level: this.gradeLevel || '',
-    header_image: result.headerImage,
-    full_image: result.fullImage,
-    score: result.score,
-    total: result.total,
-    classId: this.classId,
-    subjectId: this.subjectId
-  };
-
-  return new Promise<void>((resolve, reject) => {
-    this.scanService.createScan(this.classId, this.subjectId, scanData).subscribe({
-      next: (res: any) => {
-        const scanId = res.scanId;
-        this.scanAnswerService.saveAnswers(scanId, safeResults).subscribe({
-          next: () => { console.log("✅ Scan + answers saved!"); resolve(); },
-          error: (err: any) => { console.error(err); reject(err); }
-        });
-      },
-      error: (err: any) => { console.error(err); reject(err); }
-    });
-  });
-}
-
-async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null> {
-  if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
-    alert("⚠️ processSheet: No warpedMat available.");
-    return null;
-  }
-
+  // Helper: channel-aware gray conversion
   const toGray = (src: any) => {
     const gray = new cv.Mat();
     const code =
@@ -739,20 +650,25 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   this.detectedAnswers = {};
   this.results = [];
   this.score = 0;
+  // 🔹 Get TOS rows for this subject
+  const subject = LocalDataService.getSubject(this.classId, this.subjectId);
+  const tosRows = subject?.tos || [];
 
-  // 🔹 Use preloaded TOS instead of LocalDataService
-  const tosRows = this.tosRows || []; // preload in ngAfterViewInit or fetch from backend
-
+  // 🔹 Compute how many items are expected from TOS
   const tosTotal = tosRows.reduce((sum, row) => sum + (row.expectedItems || 0), 0);
+
+  // 🔹 Fallback if no TOS defined, use all bubbles
   const maxItems = tosTotal > 0 ? tosTotal : bubbles.length;
   this.total = maxItems;
 
-  // ✅ Draw warped sheet on canvas
-  const canvas = this.canvasRef.nativeElement;
-  cv.imshow(canvas, this.latestWarpedMat);
-  const overlayCtx = canvas.getContext("2d");
-  if (!overlayCtx) return null;
+  // ✅ Draw warped sheet on your single canvas
+  cv.imshow(this.canvasRef.nativeElement, this.latestWarpedMat);
 
+  // ✅ Use same canvas for overlays
+  const overlayCtx = this.canvasRef.nativeElement.getContext("2d");
+  if (!overlayCtx) return;
+
+  // helper for overlay rings
   const ring = (x: number, y: number, r: number, color: string, lw = 2) => {
     overlayCtx.beginPath();
     overlayCtx.arc(x, y, r, 0, 2 * Math.PI);
@@ -764,13 +680,15 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   let processed = 0;
 
   for (const bubble of bubbles) {
-    if (processed >= maxItems) break;
+    if (processed >= maxItems) break;   // ✅ stop once we hit the limit
     const qNum = bubble.question as number;
 
+    // 1) Measure fill ratios
     const ratios: Record<"A" | "B" | "C" | "D", number> = { A: 0, B: 0, C: 0, D: 0 };
 
     for (const opt of ["A", "B", "C", "D"] as const) {
-      const { cx, cy, radius } = bubble.options[opt];
+      let { cx, cy, radius } = bubble.options[opt];
+
       const side = Math.max(2 * radius, 1);
       const x = Math.max(0, Math.min(W - 1, Math.round(cx - radius)));
       const y = Math.max(0, Math.min(H - 1, Math.round(cy - radius)));
@@ -781,11 +699,18 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       const gray = toGray(patch);
 
       const bin = new cv.Mat();
+      cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
       cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
 
       const mask = cv.Mat.zeros(h, w, cv.CV_8UC1);
       const rx = Math.min(w, h) / 2 - 1;
-      cv.circle(mask, new cv.Point(Math.round(w / 2), Math.round(h / 2)), Math.round(rx), new cv.Scalar(255), -1);
+      cv.circle(
+        mask,
+        new cv.Point(Math.round(w / 2), Math.round(h / 2)),
+        Math.round(rx),
+        new cv.Scalar(255),
+        -1
+      );
 
       const masked = new cv.Mat();
       cv.bitwise_and(bin, mask, masked);
@@ -795,14 +720,11 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       const totalPixels = Math.PI * rx * rx;
       ratios[opt] = nonZero / totalPixels;
 
-      patch.delete();
-      gray.delete();
-      bin.delete();
-      mask.delete();
-      masked.delete();
+      patch.delete(); gray.delete(); bin.delete();
+      mask.delete(); masked.delete();
     }
 
-    // Select best answer
+    // 2) Select best answer
     let selected: Option | null = null;
     let bestRatio = 0.55;
     for (const opt of ["A", "B", "C", "D"] as const) {
@@ -827,9 +749,8 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       competency: bubble.competency ?? null,
       level: bubble.level ?? null,
     });
-    processed++;
-
-    // Draw overlay rings
+    processed++;   // ✅ increment after storing
+    // 3) Draw overlays
     for (const opt of ["A", "B", "C", "D"] as const) {
       const { cx, cy, radius } = bubble.options[opt];
       let color = "blue";
@@ -841,32 +762,45 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     }
   }
 
-  // Show score overlay
+  // ✅ Show score text overlay
   overlayCtx.font = 'bold 32px Arial';
   overlayCtx.fillStyle = 'black';
   overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
 
+  // Final stats
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
 
-  // Prepare final result object for backend
+  // ✅ Convert the canvas (with overlays) to DataURL for saving
   let warpedDataUrl = "";
-  try { warpedDataUrl = canvas.toDataURL("image/jpeg"); } catch {}
+  try {
+    warpedDataUrl = this.canvasRef.nativeElement.toDataURL("image/jpeg");
+  } catch (e) {
+    console.error("Failed to convert warped mat to image:", e);
+  }
 
-  const answerDistribution = this.results.reduce((acc, a) => {
-    if (a.marked) acc[a.marked] = (acc[a.marked] || 0) + 1;
-    return acc;
-  }, { A:0, B:0, C:0, D:0 });
+  // Aggregates
+  const computeAnswerDistribution = (answers: AnswerEntry[]) => {
+    const counts: Record<'A'|'B'|'C'|'D', number> = { A:0, B:0, C:0, D:0 };
+    for (const a of answers) if (a.marked) counts[a.marked]++;
+    return counts;
+  };
 
-  const cognitiveBreakdown = this.results.reduce((acc, a) => {
-    const lvl = a.level || 'N/A';
-    if (!acc[lvl]) acc[lvl] = { correct:0, total:0 };
-    acc[lvl].total++;
-    if (a.correct) acc[lvl].correct++;
-    return acc;
-  }, {} as Record<string, {correct:number, total:number}>);
+  const computeCognitiveBreakdown = (answers: AnswerEntry[]) => {
+    const map: { [level: string]: { correct: number; total: number } } = {};
+    for (const a of answers) {
+      const lvl = a.level || 'N/A';
+      if (!map[lvl]) map[lvl] = { correct: 0, total: 0 };
+      map[lvl].total++;
+      if (a.correct) map[lvl].correct++;
+    }
+    return map;
+  };
 
-    const result: ScannedResult = {
+  const answerDistribution = computeAnswerDistribution(this.results);
+  const cognitiveBreakdown = computeCognitiveBreakdown(this.results);
+
+  const result: ScannedResult = {
     id: Date.now(),
     headerImage: this.croppedHeaderBase64 ?? "",
     fullImage: warpedDataUrl,
@@ -878,15 +812,13 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     timestamp: new Date().toISOString(),
     answerDistribution,
     cognitiveBreakdown,
+    // ✅ new: store TOS rows snapshot
     tosRows,
   };
 
+  LocalDataService.saveScannedResult(this.classId, this.subjectId, result);
+
   kernel.delete();
-
-  // 👉 navigate to viewer immediately if you want
-  this.goToResultViewer(result);
-
-  return result;
 }
 
 renderAnswerDistributionChart() {

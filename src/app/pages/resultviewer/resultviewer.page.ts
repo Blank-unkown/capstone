@@ -1,22 +1,55 @@
-import { Component, OnInit, AfterViewInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
-import { 
-  LocalDataService, 
-  ScannedResult, 
-  AnswerEntry   
-} from '../../services/local-data.service';
 import { FormsModule } from '@angular/forms';
-import Chart from 'chart.js/auto';
 import { HttpClientModule } from '@angular/common/http';
-import { TopicEntry } from '../../services/local-data.service';
+import { forkJoin } from 'rxjs';
+import { ScanService } from '../../services/scan.service';
+import { TosService } from '../../services/tos.service'; // see simple service below
+import { Chart, registerables,ChartConfiguration, ChartItem} from 'chart.js';
+Chart.register(...registerables);
 
+// ===== Interfaces mirrored to DB shape =====
+export interface AnswerEntry {
+  question: number;
+  marked: string | null;
+  correctAnswer: string | null;
+  correct: boolean;
+  topic?: string | null;
+  competency?: string | null;
+  level?: string | null;
+}
+
+export interface TopicEntry {
+  topicName: string;
+  learningCompetency: string;
+  percent: number;
+  expectedItems?: number;
+  remembering?: number;
+  understanding?: number;
+  applying?: number;
+  analyzing?: number;
+  evaluating?: number;
+  creating?: number;
+  startQuestion?: number;
+  endQuestion?: number;
+}
+
+export interface ScannedResult {
+  id: number;
+  score: number;
+  total: number;
+  timestamp: string;
+  headerImage?: string | null;
+  fullImage?: string | null;
+  answers: AnswerEntry[];
+  tosRows: TopicEntry[];
+}
 
 interface TosRowAnalysis {
   topic: string;
   competency: string;
-  level: string;
   percentage: number;
   numItems: number;
   start: number;
@@ -33,7 +66,21 @@ interface TosRowAnalysis {
   standalone: true,
   imports: [IonicModule, CommonModule, FormsModule, HttpClientModule],
 })
-export class ResultviewerPage implements OnInit, AfterViewInit {
+export class ResultviewerPage implements OnInit {
+
+   private charts: { [key: string]: Chart } = {};
+@ViewChild('answersChart', { static: false })
+answersChartRef!: ElementRef<HTMLCanvasElement>;
+
+@ViewChild('cognitiveChart', { static: false })
+cognitiveChartRef!: ElementRef<HTMLCanvasElement>;
+
+@ViewChild('topicChart', { static: false })
+topicChartRef!: ElementRef<HTMLCanvasElement>;
+
+@ViewChild('competencyChart', { static: false })
+competencyChartRef!: ElementRef<HTMLCanvasElement>;
+
   classId!: number;
   subjectId!: number;
   resultId!: number;
@@ -47,130 +94,195 @@ export class ResultviewerPage implements OnInit, AfterViewInit {
   private topicChart?: Chart;
   private competencyChart?: Chart;
 
-  constructor(private route: ActivatedRoute) {}
+  constructor(private route: ActivatedRoute,
+    private scanService: ScanService,
+    private tosService: TosService,
+  ) {}
+ngOnInit() {
+  this.classId = Number(this.route.snapshot.paramMap.get('classId'));
+  this.subjectId = Number(this.route.snapshot.paramMap.get('subjectId'));
+  this.resultId = Number(this.route.snapshot.paramMap.get('scanId'));
 
-  ngOnInit() {
-  const stateResult = history.state?.resultData;
+  console.log('📌 Loaded IDs:', this.classId, this.subjectId, this.resultId);
 
-  if (stateResult) {
-    this.result = stateResult;
-    this.buildTosAnalysis();
-  } else {
-    this.route.queryParams.subscribe(params => {
-      this.classId = +params['classId'];
-      this.subjectId = +params['subjectId'];
-      this.resultId = +params['resultId'];
+  this.loadFromDb();
+}
 
-      const subject = LocalDataService.getSubject(this.classId, this.subjectId);
-      this.result = subject?.results?.find(r => r.id === this.resultId);
+private loadFromDb() {
+  forkJoin({
+    scan: this.scanService.getScan(this.classId, this.subjectId, this.resultId),
+    tosRows: this.tosService.getTOS(this.classId, this.subjectId),
+  }).subscribe({
+    next: ({ scan, tosRows }) => {
+      this.result = {
+        id: scan.id,
+        score: scan.score ?? 0,
+        total: scan.total ?? 0,
+        timestamp: scan.timestamp,
+        headerImage: scan.header_image ?? null,
+        fullImage: scan.full_image ?? null,
+        answers: (scan.scanAnswers ?? []).map((a: any) => ({
+          question: a.question_number,
+          marked: a.marked ?? null,
+          correctAnswer: a.correct_answer ?? null,
+          correct: !!a.correct,
+          topic: a.topic ?? null,
+          competency: a.competency ?? null,
+        })),
+        tosRows: tosRows ?? [],
+      };
+
+      console.log("✅ Result loaded:", this.result);
 
       this.buildTosAnalysis();
+      this.tosRowView = this.result?.tosRows ? this.buildTosRowView(this.result.tosRows) : [];
+      this.dataReady = true;   // ✅ add this
+      this.tryRenderCharts();  // instead of direct renderAllCharts()
+    },
+    error: (err) => {
+      console.error('❌ Failed to load scan/TOS from DB:', err);
+    }
+  });
+}
 
-      // 🔹 move inside subscription
-      if (this.result?.tosRows) {
-        this.tosRowView = this.buildTosRowView(this.result.tosRows);
-      }
-    });
+private renderAllCharts() {
+  if (!this.result) return;
+
+  // destroy previous charts before recreating
+  this.cognitiveChart?.destroy();
+  this.answersChart?.destroy();
+  this.topicChart?.destroy();
+  this.competencyChart?.destroy();
+
+  this.renderAnswerDistributionChart(this.result.answers);
+  this.renderCognitiveChart(this.result.answers);
+  this.renderTopicChart(this.result.answers);
+  this.renderCompetencyChart(this.result.answers);
+}
+  ngAfterViewInit() {
+    // don’t render here — just mark that DOM is ready
+    this.viewReady = true;
+    this.tryRenderCharts();
   }
-
-  // 🔹 also handle the stateResult case here
-  if (this.result?.tosRows) {
-    this.tosRowView = this.buildTosRowView(this.result.tosRows);
+private tryRenderCharts() {
+  console.log("🔎 tryRenderCharts called", {
+    dataReady: this.dataReady,
+    viewReady: this.viewReady,
+    answers: this.result?.answers?.length
+  });
+  if (this.dataReady && this.viewReady) {
+    console.log("🎨 Rendering charts now!");
+    setTimeout(() => this.renderAllCharts(), 0);
   }
 }
 
-
-  ngAfterViewInit() {
-    setTimeout(() => {
-      if (this.result) {
-        this.renderAnswerDistributionChart(this.result.answers);
-        this.renderCognitiveChart(this.result.answers);
-        this.renderTopicChart(this.result.answers);
-        this.renderCompetencyChart(this.result.answers);
-      }
-    }, 500);
-  }
+  private viewReady = false;
+  private dataReady = false;
 
   // ✅ Build TOS Row Analysis
-  private buildTosAnalysis() {
-    if (!this.result) return;
+private buildTosAnalysis() {
+  if (!this.result || !this.result.tosRows) return;
 
-    const subject = LocalDataService.getSubject(this.classId, this.subjectId);
-    if (!subject?.tosRows) return;
+  let itemCounter = 1; // start counting questions
+  this.tosAnalysis = this.result.tosRows.map((row: any) => {
+    const start = itemCounter;
+    const totalItems = row.expectedItems ?? 0;
+    const end = start + totalItems - 1;
 
-    this.tosAnalysis = subject.tosRows.map((row: any) => {
-      const start = row.startQuestion;
-      const end = row.endQuestion;
-      const rowAnswers = this.result!.answers.filter(
-        a => a.question >= start && a.question <= end
-      );
+    const rowAnswers = (this.result?.answers ?? []).filter(
+      a => a.question >= start && a.question <= end
+    );
 
-      const total = rowAnswers.length;
-      const correct = rowAnswers.filter(a => a.correct).length;
+    const correct = rowAnswers.filter(a => a.correct).length;
 
-      return {
-        topic: row.topic,
-        competency: row.competency,
-        level: row.level,
-        percentage: row.percentage,
-        numItems: row.numItems,
-        start,
-        end,
-        correct,
-        total,
-        percentScore: total > 0 ? Math.round((correct / total) * 100) : 0,
-      };
-    });
-  }
+    itemCounter += totalItems; // advance counter for next row
 
-  
+    return {
+      topic: row.topicName,
+      competency: row.learningCompetency,
+      numItems: totalItems,
+      start,
+      end,
+      correct,
+      total: totalItems, // total matches expectedItems
+      percentage: row.percent ?? 0, // planned % allocation from DB
+      percentScore: totalItems > 0 ? Math.round((correct / totalItems) * 100) : 0 // actual %
+    };
+  });
+}
+
+// ✅ Build TOS Row View
 buildTosRowView(tosRows: TopicEntry[]): any[] {
-  let itemCounter = 1;
+  let itemCounter = 1; // Q1
   const rows: any[] = [];
 
   for (const row of tosRows) {
     const cognitiveLevels: { level: string; count: number; range: string }[] = [];
     const levels: (keyof TopicEntry)[] = [
-      'remembering', 'understanding', 'applying',
-      'analyzing', 'evaluating', 'creating'
+      'remembering',
+      'understanding',
+      'applying',
+      'analyzing',
+      'evaluating',
+      'creating'
     ];
 
     const questions: any[] = [];
     let rowCorrect = 0;
-    let rowTotal = 0;
+    const rowTotal = row.expectedItems ?? 0;
+    const startQ = itemCounter;
+    const endQ = startQ + rowTotal - 1;
 
+    // Build cognitive ranges
+    let cognitiveStart = startQ;
+    const levelRanges: { level: string; start: number; end: number }[] = [];
     for (const lvl of levels) {
       const count = Number(row[lvl]) || 0;
       if (count > 0) {
-        const start = itemCounter;
-        const end = itemCounter + count - 1;
-
-        // 🔹 match answers to this range
-        for (let q = start; q <= end; q++) {
-          const ans = this.result?.answers.find(a => a.question === q);
-          if (ans) {
-            questions.push({
-              qNum: q,
-              selected: ans.marked ?? '—',
-              correct: ans.correctAnswer ?? '—',
-              isCorrect: ans.correct
-            });
-
-            rowTotal++;
-            if (ans.correct) rowCorrect++;
-          }
-        }
+        const lvlStart = cognitiveStart;
+        const lvlEnd = lvlStart + count - 1;
+        levelRanges.push({ level: String(lvl), start: lvlStart, end: lvlEnd });
 
         cognitiveLevels.push({
           level: String(lvl),
           count,
-          range: `${start}-${end}`
+          range: `${lvlStart}-${lvlEnd}`
         });
-        itemCounter += count;
+
+        cognitiveStart += count;
       }
     }
 
-    // 🔹 calculate row performance (%)
+    // Push all questions in this TOS row
+    for (let q = startQ; q <= endQ; q++) {
+      const ans = this.result?.answers.find(a => a.question === q);
+
+      // figure out which level this question belongs to
+      let level = 'N/A';
+      for (const range of levelRanges) {
+        if (q >= range.start && q <= range.end) {
+          level = range.level;
+          break;
+        }
+      }
+
+      if (ans) ans.level = level; // ✅ attach cognitive level to main answers array
+
+      questions.push({
+        qNum: q,
+        selected: ans?.marked ?? '—',
+        correct: ans?.correctAnswer ?? '—',
+        isCorrect: ans?.correct ?? false,
+        topic: row.topicName,
+        competency: row.learningCompetency,
+        level
+      });
+
+      if (ans?.correct) rowCorrect++;
+    }
+
+    itemCounter += rowTotal;
+
     const performance = rowTotal > 0 ? (rowCorrect / rowTotal) * 100 : 0;
 
     rows.push({
@@ -182,48 +294,61 @@ buildTosRowView(tosRows: TopicEntry[]): any[] {
       questions,
       rowCorrect,
       rowTotal,
-      performance: performance.toFixed(1) + '%'   // e.g. "60.0%"
+      performance: performance.toFixed(1) + '%'
     });
   }
 
   return rows;
 }
 
-  // ✅ Chart for A/B/C/D distribution
-  renderAnswerDistributionChart(answers: AnswerEntry[]) {
-    const ctx = document.getElementById('answersChart') as HTMLCanvasElement;
-    if (!ctx) return;
+private renderAnswerDistributionChart(answers: any[]) {
+  this.answersChartRef.nativeElement.getContext("2d") as CanvasRenderingContext2D;
 
-    if (this.answersChart) this.answersChart.destroy();
+  console.log("📊 [Answer Distribution] Raw answers:", answers);
 
-    const counts: Record<"A" | "B" | "C" | "D", number> = { A: 0, B: 0, C: 0, D: 0 };
-    answers.forEach(a => {
-      if (a.marked) counts[a.marked as "A" | "B" | "C" | "D"]++;
-    });
+  // Counters for each option
+  const counts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
 
-    this.answersChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: ['A', 'B', 'C', 'D'],
-        datasets: [
-          {
-            label: 'Selections',
-            data: [counts.A, counts.B, counts.C, counts.D],
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: { title: { display: true, text: 'Answer Distribution' } },
-        scales: { y: { beginAtZero: true } },
-      },
-    });
+  // Loop through answers and count
+for (const ans of answers) {
+  if (ans?.marked) {
+    const mark = ans.marked.toString().toUpperCase().trim();
+    if (['A', 'B', 'C', 'D'].includes(mark)) {
+      counts[mark as 'A' | 'B' | 'C' | 'D']++;
+    }
   }
+}
+
+
+  console.log("📊 [Answer Distribution] Counts:", counts);
+
+  const ctx = this.answersChartRef.nativeElement.getContext("2d");
+
+  // Destroy old chart if exists
+  if (this.charts['answers']) {
+    this.charts['answers'].destroy();
+  }
+
+  this.charts['answers'] = new Chart(ctx as unknown as ChartItem, {
+    type: "bar",
+    data: {
+      labels: ["A", "B", "C", "D"],
+      datasets: [
+        {
+          label: "Answer Choices",
+          data: [counts.A, counts.B, counts.C, counts.D],
+          backgroundColor: ["#42A5F5", "#66BB6A", "#FFA726", "#EF5350"],
+        },
+      ],
+    },
+  });
+
+  console.log("✅ [Answer Distribution] Chart created.");
+}
 
   // ✅ Chart for Bloom’s levels
   renderCognitiveChart(answers: AnswerEntry[]) {
-    const ctx = document.getElementById('cognitiveChart') as HTMLCanvasElement;
+    const ctx =  this.cognitiveChartRef?.nativeElement.getContext('2d');
     if (!ctx) return;
 
     if (this.cognitiveChart) this.cognitiveChart.destroy();
@@ -260,7 +385,7 @@ buildTosRowView(tosRows: TopicEntry[]): any[] {
 
   // ✅ Chart for Topic Breakdown
   renderTopicChart(answers: AnswerEntry[]) {
-    const ctx = document.getElementById('topicChart') as HTMLCanvasElement;
+    const ctx =  this.topicChartRef?.nativeElement.getContext('2d');
     if (!ctx) return;
 
     if (this.topicChart) this.topicChart.destroy();
@@ -297,7 +422,7 @@ buildTosRowView(tosRows: TopicEntry[]): any[] {
 
   // ✅ Chart for Competency Breakdown
   renderCompetencyChart(answers: AnswerEntry[]) {
-    const ctx = document.getElementById('competencyChart') as HTMLCanvasElement;
+    const ctx =  this.competencyChartRef?.nativeElement.getContext('2d');
     if (!ctx) return;
 
     if (this.competencyChart) this.competencyChart.destroy();

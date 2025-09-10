@@ -1,64 +1,108 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NavController } from '@ionic/angular';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
-import { LocalDataService } from '../../services/local-data.service';
+import { HttpClient } from '@angular/common/http';
+import { SchoolService } from '../../services/school.service';
+import { AnswerKeyService } from '../../services/answer-key.service';
+import { TosService } from '../../services/tos.service';  // ✅ import TosService
 
 @Component({
   selector: 'app-answer-key',
   templateUrl: './answer-key.page.html',
   styleUrls: ['./answer-key.page.scss'],
   standalone: true,
-  imports: [IonicModule, FormsModule, CommonModule]
+  imports: [IonicModule, FormsModule, CommonModule],
 })
 export class AnswerKeyPage implements OnInit {
   classId!: number;
   subjectId!: number;
+  className = '';
+  subjectName = '';
   totalQuestions = 0;
   answerKey: string[] = [];
   options = ['A', 'B', 'C', 'D'];
-  
 
-  constructor(private route: ActivatedRoute) {}
+  constructor(
+    private route: ActivatedRoute,
+    private schoolService: SchoolService,
+    private http: HttpClient,
+    private answerKeyService: AnswerKeyService,
+    private tosService: TosService, 
+  ) {}
 
-ngOnInit() {
+  ngOnInit() {
   this.classId = Number(this.route.snapshot.paramMap.get('classId'));
   this.subjectId = Number(this.route.snapshot.paramMap.get('subjectId'));
 
-  const subject = LocalDataService.getSubject(this.classId, this.subjectId);
-  if (!subject) {
-    alert("Subject not found. Maybe localStorage is empty.");
-    return;
-  }
+  // Fetch class name
+  this.schoolService.getClassById(this.classId).subscribe(cls => {
+    this.className = cls?.name || '';
+  });
 
-  const tos = subject.tos || [];
-  console.log('Loaded TOS:', tos);
+  // Fetch subject name
+  this.schoolService.getSubjectById(this.classId, this.subjectId).subscribe(subject => {
+    this.subjectName = subject?.name || '';
+  });
 
-  this.totalQuestions = tos.reduce((sum, t) => sum + (t.expectedItems || 0), 0);
-  console.log('Total Questions:', this.totalQuestions);
+  // Fetch TOS first (to know how many questions)
+  this.tosService.getTOS(this.classId, this.subjectId).subscribe((tos: any[]) => {
+    this.totalQuestions = tos.reduce((sum, t) => sum + (t.expectedItems || 0), 0);
 
-  this.answerKey = new Array(this.totalQuestions).fill('').map((_, i) => subject.answerKey?.[i] || '');
-  console.log('Loaded answer key:', this.answerKey);
+    // Fetch Answer Key (with service)
+    this.answerKeyService.getAnswerKey(this.classId, this.subjectId).subscribe(rows => {
+      this.answerKey = new Array(this.totalQuestions).fill('');
+
+      rows.forEach(r => {
+        const index = r.question_number - 1;
+        if (index >= 0 && index < this.totalQuestions) {
+          this.answerKey[index] = r.correct_answer || '';
+        }
+      });
+    });
+  });
 }
 
+  loadAnswerKey() {
+    this.answerKeyService
+      .getAnswerKey(this.classId, this.subjectId)
+      .subscribe(
+        rows => {
+          // initialize with empty values first
+          this.answerKey = new Array(this.totalQuestions).fill('');
+          rows.forEach(r => {
+            this.answerKey[r.question_number - 1] = r.correct_answer || '';
+          });
+        },
+        err => {
+          console.error('Failed to fetch answer key:', err);
+          // fallback: just empty array with placeholders
+          this.answerKey = new Array(this.totalQuestions).fill('');
+        }
+      );
+  }
 
   setAnswer(index: number, option: string) {
     this.answerKey[index] = option;
   }
 
-  trackByIndex(index: number, item: any): number {
-  return index;
-}
-
-
   saveAnswerKey() {
-    const subject = LocalDataService.getSubject(this.classId, this.subjectId);
-    if (subject) {
-      subject.answerKey = this.answerKey;
-      LocalDataService.save();
-      alert('Answer key saved!');
-    }
+    this.answerKeyService
+      .saveAnswerKey(this.classId, this.subjectId, this.answerKey)
+      .subscribe(
+        () => {
+          alert('✅ Answer key saved!');
+        },
+        err => {
+          console.error('Failed to save answer key:', err);
+          alert('⚠️ Failed to save answer key');
+        }
+      );
+  }
+
+  // ✅ Needed for *ngFor trackBy
+  trackByIndex(index: number, item: any): number {
+    return index;
   }
 }

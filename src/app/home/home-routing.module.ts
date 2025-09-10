@@ -11,6 +11,6 @@ const routes: Routes = [
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule] // ✅ Only export RouterModule here
 })
-export class HomePageRoutingModule {}
+export class HomePageRoutingModule {} // ✅ Make sure this is named correctly

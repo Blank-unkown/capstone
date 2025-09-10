@@ -4,16 +4,16 @@ import { PreloadAllModules, RouterModule, Routes } from '@angular/router';
 const routes: Routes = [
   {
     path: '',
-    redirectTo: 'dashboard',
+    redirectTo: 'home',
     pathMatch: 'full'
   },
-  {
+   {
     path: 'home',
-    loadChildren: () => import('./home/home.module').then(m => m.HomePageModule)
+    loadComponent: () => import('./home/home.page').then(m => m.HomePage)
   },
   {
-    path: 'dashboard',
-    loadChildren: () => import('./pages/dashboard/dashboard.module').then(m => m.DashboardPageModule)
+  path: 'dashboard',
+  loadComponent: () => import('./pages/dashboard/dashboard.page').then(m => m.DashboardPage)
   },
   {
     path: 'class-list',
@@ -34,19 +34,19 @@ const routes: Routes = [
   {
   path: 'question-generator/:classId/:subjectId',
   loadChildren: () => import('./pages/question-generator/question-generator.module').then(m => m.QuestionGeneratorPageModule)
-},
+  },
   {
     path: 'scan',
     loadChildren: () => import('./pages/scan/scan.module').then( m => m.ScanPageModule)
   },
   {
-    path: 'resultviewer',
-    loadChildren: () => import('./pages/resultviewer/resultviewer.module').then( m => m.ResultviewerPageModule)
+  path: 'resultviewer/:classId/:subjectId/:scanId',
+  loadChildren: () => import('./pages/resultviewer/resultviewer.module').then(m => m.ResultviewerPageModule)
   },
   {
   path: 'answer-key/:classId/:subjectId',
   loadChildren: () => import('./pages/answer-key/answer-key.module').then(m => m.AnswerKeyPageModule)
-},
+  },
 
 
 
