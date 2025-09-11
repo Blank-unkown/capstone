@@ -2,12 +2,26 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
+const bcrypt = require("bcrypt");
+
 // CREATE (Add user)
 router.post("/", (req, res) => {
-  const { username, email } = req.body;
-  db.query("INSERT INTO users (username, email) VALUES (?, ?)", [username, email], (err, result) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: "All fields required" });
+  }
+
+  bcrypt.hash(password, 10, (err, hash) => {
     if (err) return res.status(500).send(err);
-    res.send({ id: result.insertId, username, email });
+
+    db.query(
+      "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+      [username, email, hash],
+      (err, result) => {
+        if (err) return res.status(500).send(err);
+        res.send({ id: result.insertId, username, email });
+      }
+    );
   });
 });
 
