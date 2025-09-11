@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AnswerKeyService {
-  private baseUrl = 'http://localhost:3000/subjects';
+  private baseUrl = 'https://capstone-wwbm.onrender.com/subjects';
 
   constructor(private http: HttpClient) {}
 

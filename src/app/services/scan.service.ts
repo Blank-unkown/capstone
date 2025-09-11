@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class ScanService {
-  private baseUrl = "http://localhost:3000/subjects"; // matches scansRouter mount
+  private baseUrl = 'https://capstone-wwbm.onrender.com/subjects'; // matches scansRouter mount
 
   constructor(private http: HttpClient) {}
 

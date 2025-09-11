@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class AuthService {
-    private apiUrl = 'http://localhost:3000/auth'; // ✅ backend route
+    private apiUrl = 'https://capstone-wwbm.onrender.com/auth'; // ✅ backend route
 
   constructor(private http: HttpClient) {}
    register(user: { username: string; email: string; password: string }): Observable<any> {

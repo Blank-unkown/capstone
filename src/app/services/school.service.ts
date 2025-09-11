@@ -44,7 +44,7 @@ export interface TosEntry {
   providedIn: 'root'
 })
 export class SchoolService {
-  private apiUrl = 'http://localhost:3000'; // Adjust if needed
+  private apiUrl = 'https://capstone-wwbm.onrender.com'; // Adjust if needed
 
   constructor(private http: HttpClient) {}
 
