@@ -6,7 +6,7 @@ import { TopicEntry } from '../services/local-data.service';
 
 @Injectable({ providedIn: 'root' })
 export class TosService {
-  private baseUrl = 'http://localhost:3000/subjects';
+  private baseUrl = 'https://capstone-wwbm.onrender.com/subjects';
 
   constructor(private http: HttpClient) {}
 

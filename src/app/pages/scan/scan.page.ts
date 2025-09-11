@@ -219,7 +219,7 @@ export class ScanPage implements AfterViewInit {
             console.error("❌ Failed to load scans", err);
           }
         })
-        this.http.get<any[]>(`http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`).subscribe({
+        this.http.get<any[]>(`https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`).subscribe({
           next: (tos: any[]) => {
             this.tosRows = tos;
           },
@@ -229,7 +229,7 @@ export class ScanPage implements AfterViewInit {
           }
         });
         // Load answer key via backend (instead of LocalDataService)
-        this.http.get<string[]>(`http://localhost:3000/subjects/${this.classId}/${this.subjectId}/answer-key`).subscribe({
+        this.http.get<string[]>(`https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/answer-key`).subscribe({
           next: (answerKey: string[]) => {
             this.answerKey = {};
             answerKey.forEach((ans, idx) => {

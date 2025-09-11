@@ -22,7 +22,7 @@ export class HomePage implements OnInit {
   isRegistering = false;
 
   // ✅ Add BASE_URL
-  BASE_URL = 'http://localhost:3000/auth'; // adjust to match your Node server
+  BASE_URL = 'https://capstone-wwbm.onrender.com/auth'; // adjust to match your Node server
 
   constructor(
     private http: HttpClient,

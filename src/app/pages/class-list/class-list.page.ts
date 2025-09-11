@@ -41,8 +41,6 @@ export class ClassListPage {
     }
   }
 
-
-
   goToSubjects(classId: number) {
   this.navCtrl.navigateForward(`/subject-list/${classId}`);
 }
@@ -55,7 +53,7 @@ export class ClassListPage {
       });
     }
   }
-  
+
   
 deleteClass(classId: number) {
   if (confirm('Delete this class?')) {
