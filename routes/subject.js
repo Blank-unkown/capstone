@@ -22,13 +22,26 @@ router.get("/", (req, res) => {
   );
 });
 
-// ✅ READ subjects by class
+// ✅ READ subjects by class (with user_id check)
 router.get("/class/:classId", (req, res) => {
   const { classId } = req.params;
-  db.query("SELECT * FROM subjects WHERE class_id = ?", [classId], (err, rows) => {
-    if (err) return res.status(500).send(err);
-    res.json(rows);
-  });
+  const { user_id } = req.query;
+
+  if (!user_id) {
+    return res.status(400).json({ message: "user_id is required" });
+  }
+
+  db.query(
+    `SELECT s.* 
+     FROM subjects s
+     JOIN classes c ON s.class_id = c.id
+     WHERE s.class_id = ? AND c.user_id = ?`,
+    [classId, user_id],
+    (err, rows) => {
+      if (err) return res.status(500).send(err);
+      res.json(rows);
+    }
+  );
 });
 
 // UPDATE Subject (name + optional class_id)

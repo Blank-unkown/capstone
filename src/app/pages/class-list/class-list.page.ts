@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 import { LocalDataService } from '../../services/local-data.service';
 import { SchoolService, SchoolClass } from '../../services/school.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-class-list',
@@ -22,24 +23,27 @@ export class ClassListPage {
     private navCtrl: NavController,
     private alertCtrl: AlertController,
     private schoolService: SchoolService,
+    private authService: AuthService   // ✅ add this
   ) {}
 
     ngOnInit() {
     this.loadClasses();
   }
+loadClasses() {
+  const userId = this.authService.getCurrentUserId();
+  this.schoolService.getClasses(userId).subscribe(data => this.classes = data);
+}
 
-     loadClasses() {
-    this.schoolService.getClasses().subscribe(data => this.classes = data);
+addClass() {
+  if (this.className.trim()) {
+    const userId = this.authService.getCurrentUserId();
+    this.schoolService.addClass(this.className, userId).subscribe(newClass => {
+      this.classes.push(newClass);
+      this.className = '';
+    });
   }
+}
 
-  addClass() {
-    if (this.className.trim()) {
-      this.schoolService.addClass(this.className).subscribe(newClass => {
-        this.classes.push(newClass);
-        this.className = '';
-      });
-    }
-  }
 
   goToSubjects(classId: number) {
   this.navCtrl.navigateForward(`/subject-list/${classId}`);

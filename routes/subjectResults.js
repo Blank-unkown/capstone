@@ -6,8 +6,25 @@ const router = express.Router();
 // ✅ Get aggregated results for a subject
 router.get("/:classId/:subjectId/results", async (req, res) => {
   const { classId, subjectId } = req.params;
+  const { user_id } = req.query;
+
+  if (!user_id) {
+    return res.status(400).json({ message: "user_id is required" });
+  }
 
   try {
+    // ✅ Ensure subject belongs to this user
+    const [check] = await db.promise().query(
+      `SELECT s.id 
+       FROM subjects s 
+       JOIN classes c ON s.class_id = c.id
+       WHERE s.id = ? AND s.class_id = ? AND c.user_id = ?`,
+      [subjectId, classId, user_id]
+    );
+
+    if (!check.length) {
+      return res.status(404).json({ message: "Subject not found or not owned by user" });
+    }
     // 1. Get all scans for this subject
     const [scans] = await db.promise().query(
       "SELECT * FROM scans WHERE class_id = ? AND subject_id = ?",

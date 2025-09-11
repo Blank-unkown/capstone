@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 export interface SchoolClass {
   id: number;
   name: string;
+  user_id?: number;  // ✅ optional
 }
 
 export interface SchoolSubject {
@@ -49,16 +50,16 @@ export class SchoolService {
   constructor(private http: HttpClient) {}
 
   // ================== CLASSES ==================
-  getClasses(): Observable<SchoolClass[]> {
-    return this.http.get<SchoolClass[]>(`${this.apiUrl}/classes`);
+  getClasses(userId: number): Observable<SchoolClass[]> {
+    return this.http.get<SchoolClass[]>(`${this.apiUrl}/classes?user_id=${userId}`);
   }
 
   getClassById(id: number): Observable<SchoolClass> {
     return this.http.get<SchoolClass>(`${this.apiUrl}/classes/${id}`);
   }
 
-  addClass(name: string): Observable<SchoolClass> {
-    return this.http.post<SchoolClass>(`${this.apiUrl}/classes`, { name });
+  addClass(name: string, userId: number): Observable<SchoolClass> {
+    return this.http.post<SchoolClass>(`${this.apiUrl}/classes`, { name, user_id: userId });
   }
 
   updateClass(id: number, name: string): Observable<SchoolClass> {
