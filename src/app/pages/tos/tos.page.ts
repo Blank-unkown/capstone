@@ -74,7 +74,7 @@ loadTOS() {
   console.log("📡 Fetching TOS for subjectId=" + this.subjectId);
 
   this.http.get<TopicEntry[] | null>(
-  `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`
+  `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`
 )
     .subscribe(tos => {
       console.log("✅ Received TOS:", tos);
@@ -101,7 +101,7 @@ saveTopic(row: TopicEntry) {
   if (row.id) {
     // Existing row → update
     this.http.put(
-      `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`,
+      `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`,
       [payload] // backend expects array
     ).subscribe({
       next: () => {
@@ -116,7 +116,7 @@ saveTopic(row: TopicEntry) {
   } else {
     // New row → insert
     this.http.post(
-      `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`,
+      `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`,
       payload
     ).subscribe({
       next: () => {
@@ -138,7 +138,7 @@ saveAllNewTopics() {
 
   // Save all new topics
     this.http.post(
-      `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`,
+      `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`,
       unsaved.map(t => {
         const copy = { ...t };
         delete copy.id;
@@ -168,7 +168,7 @@ saveTOS() {
 
   // Update existing topics
     this.http.put(
-      `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos`,
+      `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`,
       existing
     )
     .subscribe({
@@ -194,7 +194,7 @@ deleteTopic(row: TopicEntry) {
 
   // Delete topic
     this.http.delete(
-      `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/tos/${row.id}`
+      `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos/${row.id}`
     )
     .subscribe({
       next: () => {

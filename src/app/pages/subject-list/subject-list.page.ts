@@ -194,7 +194,7 @@ goToScannedResults(subjectId: number) {
 deleteScan(resultId: number) {
   if (!confirm('Are you sure you want to delete this scanned result?')) return;
 
-  fetch(`http://localhost:3000/scans/${resultId}`, { method: 'DELETE' })
+  fetch(`https://capstone-wwbm.onrender.com/scans/${resultId}`, { method: 'DELETE' })
     .then(res => {
       if (!res.ok) throw new Error('Failed to delete scan');
 
@@ -246,7 +246,7 @@ async loadAnalysis() {
   }
 
   try {
-    const url = `http://localhost:3000/subjects/${this.classId}/${this.subjectId}/results`;
+    const url = `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/results`;
     console.log("📡 Fetching analysis from:", url);
 
     const resp = await fetch(url);
