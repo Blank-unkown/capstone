@@ -9,6 +9,7 @@ import { TosService } from '../../services/tos.service';
 import { ScanService } from '../../services/scan.service';
 import { AnswerKeyService } from '../../services/answer-key.service';
 import { TopicEntry } from 'src/app/services/local-data.service';
+import { AuthService } from '../../services/auth.service';
 import { Chart, registerables,ChartConfiguration, ChartItem} from 'chart.js';
 Chart.register(...registerables);
 //import Chart from 'chart.js/auto';
@@ -83,7 +84,8 @@ export class SubjectListPage implements OnInit {
     private schoolService: SchoolService,
     private tosService: TosService,
     private scanService: ScanService,
-    private answerKeyService: AnswerKeyService
+    private answerKeyService: AnswerKeyService,
+    private authService: AuthService   // ✅ add this
   ) {}
 
   ngOnInit() {
@@ -92,35 +94,35 @@ export class SubjectListPage implements OnInit {
 
   this.loadSubjects();
 }
-
-  // ✅ Load subjects for this class
-  loadSubjects() {
-  this.schoolService.getSubjectsByClass(this.classId).subscribe(subs => {
+loadSubjects() {
+  const userId = this.authService.getCurrentUserId();   // ✅ add this
+  this.schoolService.getSubjectsByClass(this.classId, userId).subscribe(subs => {
     console.log("📌 Subjects loaded:", subs);
     this.subjects = subs;
   });
 }
 
-  // ✅ Add subject (saves to MySQL)
-  addSubject() {
-    if (this.subjectName.trim()) {
-      this.schoolService.addSubject(this.classId, this.subjectName).subscribe(newSubject => {
-        this.subjects.push(newSubject);
-        this.subjectName = '';
-      });
-    }
+addSubject() {
+  if (this.subjectName.trim()) {
+    const userId = this.authService.getCurrentUserId();   // ✅ add this
+    this.schoolService.addSubject(this.classId, this.subjectName, userId).subscribe(newSubject => {
+      this.subjects.push(newSubject);
+      this.subjectName = '';
+    });
   }
+}
 
-  // ✅ Edit subject (updates in MySQL)
-  editSubject(id: number, oldName: string) {
-    const newName = prompt('Enter new subject name:', oldName);
-    if (newName && newName.trim()) {
-      this.schoolService.updateSubject(id, newName, this.classId).subscribe(() => {
-        const subj = this.subjects.find(s => s.id === id);
-        if (subj) subj.name = newName;
-      });
-    }
+editSubject(id: number, oldName: string) {
+  const newName = prompt('Enter new subject name:', oldName);
+  if (newName && newName.trim()) {
+    const userId = this.authService.getCurrentUserId();   // ✅ add this
+    this.schoolService.updateSubject(id, newName, this.classId, userId).subscribe(() => {
+      const subj = this.subjects.find(s => s.id === id);
+      if (subj) subj.name = newName;
+    });
   }
+}
+
 
   // ✅ Delete subject (removes from MySQL)
   deleteSubject(subjectId: number) {

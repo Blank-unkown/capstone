@@ -49,16 +49,16 @@ addClass() {
   this.navCtrl.navigateForward(`/subject-list/${classId}`);
 }
 
-   editClass(cls: SchoolClass) {
-    const newName = prompt('Enter new class name:', cls.name);
-    if (newName) {
-      this.schoolService.updateClass(cls.id, newName).subscribe(updated => {
-        cls.name = updated.name;
-      });
-    }
+editClass(cls: SchoolClass) {
+  const newName = prompt('Enter new class name:', cls.name);
+  if (newName) {
+    const userId = this.authService.getCurrentUserId();   // ✅ add this
+    this.schoolService.updateClass(cls.id, newName, userId).subscribe(updated => {
+      cls.name = updated.name;
+    });
   }
+}
 
-  
 deleteClass(classId: number) {
   if (confirm('Delete this class?')) {
     this.schoolService.deleteClass(classId).subscribe(() => {

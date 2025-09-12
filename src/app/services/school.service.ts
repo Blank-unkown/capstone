@@ -62,8 +62,9 @@ export class SchoolService {
     return this.http.post<SchoolClass>(`${this.apiUrl}/classes`, { name, user_id: userId });
   }
 
-  updateClass(id: number, name: string): Observable<SchoolClass> {
-    return this.http.put<SchoolClass>(`${this.apiUrl}/classes/${id}`, { name });
+// NEW (accepts userId)
+  updateClass(id: number, name: string, userId: number): Observable<SchoolClass> {
+    return this.http.put<SchoolClass>(`${this.apiUrl}/classes/${id}`, { name, user_id: userId });
   }
 
   deleteClass(id: number): Observable<void> {
@@ -71,22 +72,25 @@ export class SchoolService {
   }
 
   // ================== SUBJECTS ==================
-  getSubjectsByClass(classId: number): Observable<SchoolSubject[]> {
-    return this.http.get<SchoolSubject[]>(`${this.apiUrl}/subjects/class/${classId}`);
+  // NEW (accepts userId)
+  getSubjectsByClass(classId: number, userId: number): Observable<SchoolSubject[]> {
+    return this.http.get<SchoolSubject[]>(`${this.apiUrl}/subjects/class/${classId}?user_id=${userId}`);
   }
+
 
   getSubjectById(classId: number, subjectId: number): Observable<SchoolSubject> {
     return this.http.get<SchoolSubject>(`${this.apiUrl}/subjects/${classId}/${subjectId}`);
   }
 
-  addSubject(classId: number, name: string): Observable<SchoolSubject> {
-    return this.http.post<SchoolSubject>(`${this.apiUrl}/subjects`, { name, class_id: classId });
-  }
+  // NEW (accepts userId)
+    addSubject(classId: number, name: string, userId: number): Observable<SchoolSubject> {
+      return this.http.post<SchoolSubject>(`${this.apiUrl}/subjects`, { name, class_id: classId, user_id: userId });
+    }
 
-  updateSubject(id: number, name: string, classId: number): Observable<SchoolSubject> {
-    return this.http.put<SchoolSubject>(`${this.apiUrl}/subjects/${id}`, { name, class_id: classId });
-  }
-
+  // NEW (accepts userId)
+    updateSubject(id: number, name: string, classId: number, userId: number): Observable<SchoolSubject> {
+      return this.http.put<SchoolSubject>(`${this.apiUrl}/subjects/${id}`, { name, class_id: classId, user_id: userId });
+    }
   deleteSubject(id: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/subjects/${id}`);
   }
