@@ -7,6 +7,7 @@ import { HttpClient } from '@angular/common/http';
 import { SchoolService } from '../../services/school.service';
 import { AnswerKeyService } from '../../services/answer-key.service';
 import { TosService } from '../../services/tos.service';  // ✅ import TosService
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-answer-key',
@@ -30,17 +31,17 @@ export class AnswerKeyPage implements OnInit {
     private http: HttpClient,
     private answerKeyService: AnswerKeyService,
     private tosService: TosService, 
+    private authService: AuthService,   // ✅ add this
   ) {}
 
   ngOnInit() {
   this.classId = Number(this.route.snapshot.paramMap.get('classId'));
   this.subjectId = Number(this.route.snapshot.paramMap.get('subjectId'));
 
-  // Fetch class name
-  this.schoolService.getClassById(this.classId).subscribe(cls => {
-    this.className = cls?.name || '';
+   const userId = this.authService.getCurrentUserId();
+  this.schoolService.getClassById(this.classId, userId).subscribe(cls => {
+    this.className = cls.name;
   });
-
   // Fetch subject name
   this.schoolService.getSubjectById(this.classId, this.subjectId).subscribe(subject => {
     this.subjectName = subject?.name || '';

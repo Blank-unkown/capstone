@@ -7,6 +7,7 @@ import { HttpClient } from '@angular/common/http';
 import { SchoolService } from '../../services/school.service';
 import { RouterModule } from '@angular/router';
 import { AnswerSheetGeneratorPage } from '../answer-sheet-generator/answer-sheet-generator.page';
+import { AuthService } from '../../services/auth.service';
 
 export interface TopicEntry {
   id?: number;                // DB row id
@@ -48,6 +49,7 @@ export class TosPage implements OnInit {
     private schoolService: SchoolService,
     private http: HttpClient,
     private toastController: ToastController,
+    private authService: AuthService,  // ✅ add this
   ) {}
 
   ngOnInit() {
@@ -57,7 +59,8 @@ export class TosPage implements OnInit {
   console.log('➡️ TosPage init with classId:', this.classId, 'subjectId:', this.subjectId);
 
   // Fetch class name
-  this.schoolService.getClassById(this.classId).subscribe(cls => {
+  const userId = this.authService.getCurrentUserId();
+  this.schoolService.getClassById(this.classId, userId).subscribe(cls => {
     this.className = cls?.name || '';
   });
 

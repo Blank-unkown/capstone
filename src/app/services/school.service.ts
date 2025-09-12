@@ -54,9 +54,9 @@ export class SchoolService {
     return this.http.get<SchoolClass[]>(`${this.apiUrl}/classes?user_id=${userId}`);
   }
 
-  getClassById(id: number): Observable<SchoolClass> {
-    return this.http.get<SchoolClass>(`${this.apiUrl}/classes/${id}`);
-  }
+  getClassById(id: number, userId: number): Observable<SchoolClass> {
+  return this.http.get<SchoolClass>(`${this.apiUrl}/classes/${id}?user_id=${userId}`);
+}
 
   addClass(name: string, userId: number): Observable<SchoolClass> {
     return this.http.post<SchoolClass>(`${this.apiUrl}/classes`, { name, user_id: userId });

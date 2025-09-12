@@ -11,6 +11,7 @@ import html2canvas from 'html2canvas';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { SchoolService } from '../../services/school.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-answer-sheet-generator',
@@ -34,7 +35,8 @@ export class AnswerSheetGeneratorPage implements OnInit {
     private toastController: ToastController,
     private loadingController: LoadingController,
     private schoolService: SchoolService,
-    private tosService: TosService
+    private tosService: TosService,
+    private authService: AuthService,   // ✅ add this
   ) {}
 
   ngOnInit() {
@@ -42,7 +44,8 @@ export class AnswerSheetGeneratorPage implements OnInit {
     this.subjectId = Number(this.route.snapshot.paramMap.get('subjectId'));
 
     // Load class name
-    this.schoolService.getClassById(this.classId).subscribe(cls => {
+    const userId = this.authService.getCurrentUserId();
+    this.schoolService.getClassById(this.classId, userId).subscribe(cls => {
       if (cls) this.className = cls.name;
     });
 
