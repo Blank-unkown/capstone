@@ -47,9 +47,6 @@ const routes: Routes = [
   path: 'answer-key/:classId/:subjectId',
   loadChildren: () => import('./pages/answer-key/answer-key.module').then(m => m.AnswerKeyPageModule)
   },
-
-
-
 ];
 
 @NgModule({

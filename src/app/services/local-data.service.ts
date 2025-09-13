@@ -70,7 +70,6 @@ export interface Class {
 }
 export class LocalDataService {
   private static classes: Class[] = [];
-
   // ---------- Load & Save ----------
   static async load(): Promise<void> {
     const stored = await Preferences.get({ key: 'examData' });
@@ -80,16 +79,13 @@ export class LocalDataService {
       this.classes = [];
     }
   }
-
   static async save(): Promise<void> {
     await Preferences.set({ key: 'examData', value: JSON.stringify(this.classes) });
   }
-
   // ---------- Classes ----------
   static getClasses(): Class[] {
     return this.classes;
   }
-
   static addClass(name: string) {
     const newClass: Class = {
       id: Date.now(),
@@ -99,11 +95,9 @@ export class LocalDataService {
     this.classes.push(newClass);
     this.save();
   }
-
   static getClass(id: number): Class | undefined {
     return this.classes.find(cls => cls.id === id);
   }
-
   static updateClass(id: number, name: string) {
     const cls = this.getClass(id);
     if (cls) {
@@ -111,17 +105,14 @@ export class LocalDataService {
       this.save();
     }
   }
-
   static deleteClass(classId: number) {
     this.classes = this.classes.filter(cls => cls.id !== classId);
     this.save();
   }
-
   // ---------- Subjects ----------
   static getSubject(classId: number, subjectId: number): Subject | undefined {
     return this.getClass(classId)?.subjects.find(sub => sub.id === subjectId);
   }
-
   static addSubject(classId: number, subjectName: string) {
     const cls = this.getClass(classId);
     if (cls) {
@@ -137,7 +128,6 @@ export class LocalDataService {
       this.save();
     }
   }
-
   static updateSubject(classId: number, subjectId: number, newName: string) {
     const cls = this.getClass(classId);
     if (cls) {
@@ -148,7 +138,6 @@ export class LocalDataService {
       }
     }
   }
-
   static deleteSubject(classId: number, subjectId: number) {
     const cls = this.getClass(classId);
     if (cls) {
@@ -156,8 +145,6 @@ export class LocalDataService {
       this.save();
     }
   }
-
-
   static saveTOS(classId: number, subjectId: number, tos: TopicEntry[]) {
     const subject = this.getSubject(classId, subjectId);
     if (subject) {
@@ -222,8 +209,6 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
   });
   return rows;
 }
-
-
   static saveScannedResult(classId: number, subjectId: number, result: ScannedResult) {
     const subject = this.getSubject(classId, subjectId);
     if (!subject) return;
@@ -231,8 +216,6 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
     subject.results.push(result);
     this.save(); // still async-compatible
   }
-
-  
   // 🔹 NEW: Get all results for a subject
   static getResultsBySubject(classId: number, subjectId: number): ScannedResult[] {
     const subject = this.getSubject(classId, subjectId);
@@ -259,7 +242,6 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
 
     return counts;
   }
-
   static getAggregatedCognitiveBreakdown(classId: number, subjectId: number) {
     const results = this.getResultsBySubject(classId, subjectId);
     const breakdown: { [level: string]: { correct: number; total: number } } = {};
@@ -272,7 +254,6 @@ static generateTOSRows(tos: TopicEntry[]): TosRow[] {
         if (a.correct) breakdown[level].correct++;
       });
     });
-
     return breakdown;
   }
 }

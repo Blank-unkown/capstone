@@ -14,7 +14,6 @@ const scanAnswersRouter = require("./routes/scanAnswers");
 const scansRouter = require("./routes/scans");
 const subjectResultsRouter = require("./routes/subjectResults");
 // ✅ Mount routers
-app.use("/subjects", subjectResultsRouter);
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/classes", classesRoutes);

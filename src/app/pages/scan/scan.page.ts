@@ -16,7 +16,7 @@ import { PreloaderService } from '../../services/preloader.service';
 import jsQR from 'jsqr';
 import { ScanService } from '../../services/scan.service';
 import { ScanAnswerService } from '../../services/scanAnswer.service';
-
+import { Optional } from '@angular/core';
 
 declare var cv: any;
 declare const Tesseract: any;
@@ -136,6 +136,7 @@ function isGoodWarpCandidate(corners: { x: number, y: number }[]): boolean {
   styleUrls: ['scan.page.scss'],
   standalone: true,
   imports: [IonicModule, CommonModule, FormsModule, HttpClientModule],
+  providers: [AndroidPermissions],
 })
 export class ScanPage implements AfterViewInit {
   @ViewChild('canvas', { static: false }) canvasRef!: ElementRef<HTMLCanvasElement>;
@@ -195,13 +196,13 @@ export class ScanPage implements AfterViewInit {
     private http: HttpClient,
     private navCtrl: NavController,
     private route: ActivatedRoute,
-    private androidPermissions: AndroidPermissions,
     private cameraService: CameraService,
     private preloader: PreloaderService,
     private scanService: ScanService,           // ✅ new
     private scanAnswerService: ScanAnswerService, // ✅ new
+    @Optional() private androidPermissions?: AndroidPermissions,
   ) {}
-
+ 
   async ngAfterViewInit() {
       await this.waitForVideoElement();
       // Load OpenCV
@@ -271,10 +272,15 @@ private initOpenCVMatsAndCapture(videoEl: HTMLVideoElement) {
   }
 }
 
-  onStartCameraButtonClick() {
-    this.showCamera = true;
+onStartCameraButtonClick() {
+  this.showCamera = true;
+
+  // Wait for Angular to render the <video> element
+  setTimeout(() => {
     this.startCameraView();
-  }
+  }, 0);
+}
+
 
   startCameraView() {
   const videoEl: HTMLVideoElement = this.videoRef?.nativeElement;
