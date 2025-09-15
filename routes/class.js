@@ -28,15 +28,16 @@ router.get("/", (req, res) => {
   if (!user_id) {
     return res.status(400).json({ message: "user_id is required" });
   }
-
   db.query(
     "SELECT * FROM classes WHERE user_id = ?",
     [user_id],
     (err, rows) => {
       if (err) return res.status(500).send(err);
+      console.log("✅ Classes returned:", rows); // 👈 add this
       res.json(rows);
     }
   );
+
 });
 
 // Get single class (check user_id too)
