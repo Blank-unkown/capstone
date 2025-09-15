@@ -8,56 +8,61 @@ const router = express.Router();
 const SECRET_KEY = "supersecretkey"; // change in production
 
 // Register
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  bcrypt.hash(password, 10, (err, hash) => {
-    if (err) return res.status(500).json({ message: "Error hashing password" });
+  try {
+    const hash = await bcrypt.hash(password, 10);
 
-    db.query(
+    await db.query(
       "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-      [username, email, hash],
-      (err, result) => {
-        if (err) {
-          if (err.code === "ER_DUP_ENTRY") {
-            return res.status(400).json({ message: "Email already exists" });
-          }
-          return res.status(500).json({ message: "Database error" });
-        }
-        res.json({ message: "User registered successfully" });
-      }
+      [username, email, hash]
     );
-  });
+
+    res.json({ message: "User registered successfully" });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+    console.error("❌ DB error:", err);
+    return res.status(500).json({ message: "Database error" });
+  }
 });
 
 // Login
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
-  db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-    if (err) return res.status(500).json({ message: "Database error" });
+  try {
+    const [results] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
     if (results.length === 0) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
     const user = results[0];
-    bcrypt.compare(password, user.password, (err, isMatch) => {
-      if (err) return res.status(500).json({ message: "Error comparing passwords" });
-      if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
 
-      const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, {
-        expiresIn: "1h",
-      });
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET || "supersecretkey",
+      { expiresIn: "1h" }
+    );
 
-      res.json({ 
-        token, 
-        user: { id: user.id, username: user.username, email: user.email } 
-      });
+    res.json({
+      token,
+      user: { id: user.id, username: user.username, email: user.email },
     });
-  });
+  } catch (err) {
+    console.error("❌ DB error:", err);
+    return res.status(500).json({ message: "Database error" });
+  }
 });
+
 
 module.exports = router;
