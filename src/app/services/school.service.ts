@@ -67,9 +67,10 @@ export class SchoolService {
     return this.http.put<SchoolClass>(`${this.apiUrl}/classes/${id}`, { name, user_id: userId });
   }
 
-  deleteClass(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/classes/${id}`);
-  }
+  deleteClass(id: number, userId: number): Observable<void> {
+  return this.http.delete<void>(`${this.apiUrl}/classes/${id}?user_id=${userId}`);
+}
+
 
   // ================== SUBJECTS ==================
   // NEW (accepts userId)

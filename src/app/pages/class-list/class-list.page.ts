@@ -61,11 +61,13 @@ editClass(cls: SchoolClass) {
 
 deleteClass(classId: number) {
   if (confirm('Delete this class?')) {
-    this.schoolService.deleteClass(classId).subscribe(() => {
+    const userId = this.authService.getCurrentUserId();
+    this.schoolService.deleteClass(classId, userId).subscribe(() => {
       this.classes = this.classes.filter(c => c.id !== classId);
     });
   }
 }
+
 
   refreshClasses() {
     this.classes = LocalDataService.getClasses();

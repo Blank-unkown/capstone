@@ -63,6 +63,4 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ message: "Database error" });
   }
 });
-
-
 module.exports = router;
