@@ -705,7 +705,7 @@ async uploadScan(result: any) {
   formData.append("score", String(this.score));
   formData.append("answers", JSON.stringify(result.answers || {}));
 
-  this.http.post("https://your-backend/scans", formData).subscribe({
+  this.http.post("https://capstone-wwbm.onrender.com/subjects/scans", formData).subscribe({
     next: (res) => {
       console.log("✅ Scan uploaded", res);
       this.latestResult = res as any; // keep for later use

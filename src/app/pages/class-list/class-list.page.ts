@@ -31,7 +31,17 @@ export class ClassListPage {
   }
 loadClasses() {
   const userId = this.authService.getCurrentUserId();
-  this.schoolService.getClasses(userId).subscribe(data => this.classes = data);
+  console.log("🔑 Logged in userId:", userId);
+
+  this.schoolService.getClasses(userId).subscribe({
+    next: (data) => {
+      console.log("📥 Classes from backend:", data);
+      this.classes = data;
+    },
+    error: (err) => {
+      console.error("❌ Error loading classes:", err);
+    }
+  });
 }
 
 addClass() {
@@ -43,7 +53,6 @@ addClass() {
     });
   }
 }
-
 
   goToSubjects(classId: number) {
   this.navCtrl.navigateForward(`/subject-list/${classId}`);
@@ -67,8 +76,6 @@ deleteClass(classId: number) {
     });
   }
 }
-
-
   refreshClasses() {
     this.classes = LocalDataService.getClasses();
   }
