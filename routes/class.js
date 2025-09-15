@@ -32,8 +32,11 @@ router.get("/", (req, res) => {
     "SELECT * FROM classes WHERE user_id = ?",
     [user_id],
     (err, rows) => {
-      if (err) return res.status(500).send(err);
-      console.log("✅ Classes returned:", rows); // 👈 add this
+      if (err) {
+        console.error("❌ DB Error in GET /classes:", err);
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      console.log("✅ Classes returned:", rows);
       res.json(rows);
     }
   );
@@ -52,8 +55,12 @@ router.get("/:id", (req, res) => {
     "SELECT * FROM classes WHERE id=? AND user_id=?",
     [req.params.id, user_id],
     (err, rows) => {
-      if (err) return res.status(500).send(err);
-      res.json(rows[0]);
+       if (err) {
+        console.error("❌ DB Error in GET /classes:", err);
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      console.log("✅ Classes returned:", rows);
+      res.json(rows);
     }
   );
 });
@@ -70,7 +77,12 @@ router.put("/:id", (req, res) => {
     "UPDATE classes SET name=? WHERE id=? AND user_id=?",
     [name, req.params.id, user_id],
     (err, result) => {
-      if (err) return res.status(500).send(err);
+       if (err) {
+        console.error("❌ DB Error in GET /classes:", err);
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      console.log("✅ Classes returned:", rows);
+      res.json(rows);
       if (result.affectedRows === 0) {
         return res.status(404).json({ message: "Class not found or not owned by user" });
       }
@@ -91,7 +103,12 @@ router.delete("/:id", (req, res) => {
     "DELETE FROM classes WHERE id=? AND user_id=?",
     [req.params.id, user_id],
     (err, result) => {
-      if (err) return res.status(500).send(err);
+       if (err) {
+        console.error("❌ DB Error in GET /classes:", err);
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      console.log("✅ Classes returned:", rows);
+      res.json(rows);
       if (result.affectedRows === 0) {
         return res.status(404).json({ message: "Class not found or not owned by user" });
       }
