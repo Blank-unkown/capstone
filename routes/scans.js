@@ -2,6 +2,10 @@
 const express = require("express");
 const db = require("../db");
 const router = express.Router({ mergeParams: true });
+const multer = require("multer");
+// 📂 Setup multer for in-memory file storage
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 /**
  * 📌 Create a scan AND save all answers in one flow.
@@ -12,88 +16,112 @@ const router = express.Router({ mergeParams: true });
  *   answers: [{ question_number: number, marked?: 'A'|'B'|'C'|'D'|null }]
  * }
  */
-router.post("/:classId/:subjectId/scans", async (req, res) => {
-  const { classId, subjectId } = req.params;
-  const { header_image, full_image, answers } = req.body;
 
-  if (!Array.isArray(answers)) {
-    return res.status(400).json({ error: "answers[] is required" });
-  }
+/**
+ * 📌 Create a scan (with uploaded images + answers)
+ */
+router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { name: "sheet" }]),
+  async (req, res) => {
+    const { classId, subjectId } = req.params;
 
-  const conn = await db.getConnection();
-  try {
-    await conn.beginTransaction();
+    // ✅ Images from FormData
+    const headerFile = req.files["header"]?.[0];
+    const sheetFile = req.files["sheet"]?.[0];
 
-    // 1) Insert scan metadata
-    const [scanResult] = await conn.query(
-      `INSERT INTO scans (class_id, subject_id, header_image, full_image, score, total, timestamp)
-       VALUES (?, ?, ?, ?, 0, 0, NOW())`,
-      [classId, subjectId, header_image || null, full_image || null]
-    );
-    const scanId = scanResult.insertId;
+    const header_image = headerFile
+      ? `data:${headerFile.mimetype};base64,${headerFile.buffer.toString("base64")}`
+      : null;
+    const full_image = sheetFile
+      ? `data:${sheetFile.mimetype};base64,${sheetFile.buffer.toString("base64")}`
+      : null;
 
-    // 2) Load the official answer key for this class/subject
-    const [keyRows] = await conn.query(
-      `SELECT question_number, correct_answer
-         FROM answer_keys
-        WHERE class_id = ? AND subject_id = ?
-        ORDER BY question_number ASC`,
-      [classId, subjectId]
-    );
+    // ✅ Metadata
+    const { score, answers } = req.body;
 
-    if (!keyRows.length) {
-      throw new Error("No answer key found for this class/subject.");
+    let parsedAnswers;
+    try {
+      parsedAnswers = JSON.parse(answers || "[]");
+    } catch {
+      return res.status(400).json({ error: "answers must be valid JSON" });
     }
 
-    // 3) Index incoming marked answers by question_number
-    const markedMap = new Map();
-    for (const a of answers) {
-      if (!a || typeof a.question_number !== "number") continue;
-      const m = (a.marked ?? null);
-      markedMap.set(a.question_number, m);
+    if (!Array.isArray(parsedAnswers)) {
+      return res.status(400).json({ error: "answers[] is required" });
     }
 
-    // 4) Insert one scan_answers row per key (guarantees full coverage)
-    let score = 0;
-    let total = 0;
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    for (const k of keyRows) {
-      const qn = k.question_number;
-      const correctAns = (k.correct_answer || null);
-      const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
+      // 1) Insert scan metadata
+      const [scanResult] = await conn.query(
+        `INSERT INTO scans (class_id, subject_id, header_image, full_image, score, total, timestamp)
+         VALUES (?, ?, ?, ?, 0, 0, NOW())`,
+        [classId, subjectId, header_image, full_image]
+      );
+      const scanId = scanResult.insertId;
 
-      const isCorrect =
-        marked && correctAns &&
-        String(marked).toUpperCase() === String(correctAns).toUpperCase()
-          ? 1
-          : 0;
-
-      await conn.query(
-        `INSERT INTO scan_answers (scan_id, question_number, marked, correct_answer, correct)
-         VALUES (?, ?, ?, ?, ?)`,
-        [scanId, qn, marked, correctAns, isCorrect]
+      // 2) Load the official answer key
+      const [keyRows] = await conn.query(
+        `SELECT question_number, correct_answer
+           FROM answer_keys
+          WHERE class_id = ? AND subject_id = ?
+          ORDER BY question_number ASC`,
+        [classId, subjectId]
       );
 
-      total += 1;
-      score += isCorrect;
+      if (!keyRows.length) {
+        throw new Error("No answer key found for this class/subject.");
+      }
+
+      // 3) Index marked answers
+      const markedMap = new Map();
+      for (const a of parsedAnswers) {
+        if (!a || typeof a.question_number !== "number") continue;
+        markedMap.set(a.question_number, a.marked ?? null);
+      }
+
+      // 4) Insert answers
+      let computedScore = 0;
+      let total = 0;
+
+      for (const k of keyRows) {
+        const qn = k.question_number;
+        const correctAns = k.correct_answer || null;
+        const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
+
+        const isCorrect =
+          marked && correctAns &&
+          String(marked).toUpperCase() === String(correctAns).toUpperCase()
+            ? 1
+            : 0;
+
+        await conn.query(
+          `INSERT INTO scan_answers (scan_id, question_number, marked, correct_answer, correct)
+           VALUES (?, ?, ?, ?, ?)`,
+          [scanId, qn, marked, correctAns, isCorrect]
+        );
+
+        total += 1;
+        computedScore += isCorrect;
+      }
+
+      // 5) Update scan with score/total
+      await conn.query(
+        `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
+        [computedScore, total, scanId]
+      );
+
+      await conn.commit();
+      return res.json({ message: "✅ Scan saved", scanId, score: computedScore, total });
+    } catch (err) {
+      await conn.rollback();
+      console.error("❌ Error saving scan:", err);
+      return res.status(500).json({ error: "Failed to save scan" });
+    } finally {
+      conn.release();
     }
-
-    // 5) Update scan with computed score/total
-    await conn.query(
-      `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
-      [score, total, scanId]
-    );
-
-    await conn.commit();
-    return res.json({ message: "✅ Scan + answers saved", scanId, score, total });
-  } catch (err) {
-    await conn.rollback();
-    console.error("❌ Error saving scan + answers:", err);
-    return res.status(500).json({ error: "Failed to save scan + answers" });
-  } finally {
-    conn.release();
-  }
-});
+  });
 /**
  * 📌 Get all scans for a subject/class with recomputed score/total
  */
