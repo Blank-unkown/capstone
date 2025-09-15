@@ -14,8 +14,21 @@ export class AuthService {
   }
 
   login(credentials: { email: string; password: string }): Observable<any> {
-    return this.http.post(`${this.apiUrl}/login`, credentials);
-  }
+  return new Observable(observer => {
+    this.http.post<any>(`${this.apiUrl}/login`, credentials).subscribe({
+      next: (resp) => {
+        if (resp.token) {
+          localStorage.setItem('auth_token', resp.token); // ✅ Save token
+          this.setUserData(resp.user); // ✅ Save user info
+        }
+        observer.next(resp);
+        observer.complete();
+      },
+      error: (err) => observer.error(err)
+    });
+  });
+}
+
 
   // ✅ check if token exists
   public isLoggedIn(): boolean {

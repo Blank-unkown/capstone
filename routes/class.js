@@ -23,6 +23,7 @@ router.post("/", (req, res) => {
 // READ Classes (filter by user_id)
 router.get("/", (req, res) => {
   const { user_id } = req.query; // expect user_id in query string for now
+  console.log("📥 Classes GET user_id =", user_id); // 👈 debug log
 
   if (!user_id) {
     return res.status(400).json({ message: "user_id is required" });
