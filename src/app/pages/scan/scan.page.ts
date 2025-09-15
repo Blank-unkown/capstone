@@ -144,11 +144,13 @@ export class ScanPage implements AfterViewInit {
 
   canvasWidth = 800;
   canvasHeight = Math.round(800 * 1.414);
+  latestWarpedMat: any = null;
+  latestWarpedMatBase64: string | null = null; // ✅ add this
 
   // Inside ScanPage class
   latestResult: ScannedResult | null = null;
   latestResultId: number | null = null; // or string, depending on how you save IDs
-  latestWarpedMat: any = null;
+  //latestWarpedMat: any = null;
   classId: number = 0;
   subjectId: number = 0;
   chart: Chart | undefined;
@@ -280,7 +282,6 @@ onStartCameraButtonClick() {
     this.startCameraView();
   }, 0);
 }
-
 
   startCameraView() {
   const videoEl: HTMLVideoElement = this.videoRef?.nativeElement;
@@ -664,6 +665,53 @@ async detectAndCropPaper() {
 
     return null;
   }
+}
+
+// 🔹 Convert Base64 → Blob
+dataURItoBlob(dataURI: string) {
+  const byteString = atob(dataURI.split(',')[1]);
+  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeString });
+}
+
+// 🔹 Upload scan result + images
+async uploadScan(result: any) {
+  const formData = new FormData();
+
+  // ✅ Attach images (fallback "" if null)
+  if (this.croppedHeaderBase64) {
+    formData.append(
+      "header",
+      this.dataURItoBlob(this.croppedHeaderBase64 || ""),
+      "header.jpg"
+    );
+  }
+  if (this.latestWarpedMatBase64) {
+    formData.append(
+      "sheet",
+      this.dataURItoBlob(this.latestWarpedMatBase64 || ""),
+      "sheet.jpg"
+    );
+  }
+
+  // ✅ Attach metadata (numbers → String)
+  formData.append("classId", String(this.classId));
+  formData.append("subjectId", String(this.subjectId));
+  formData.append("score", String(this.score));
+  formData.append("answers", JSON.stringify(result.answers || {}));
+
+  this.http.post("https://your-backend/scans", formData).subscribe({
+    next: (res) => {
+      console.log("✅ Scan uploaded", res);
+      this.latestResult = res as any; // keep for later use
+    },
+    error: (err) => console.error("❌ Upload failed", err),
+  });
 }
 // 🔹 Main handler after scanning
 async handleScanComplete() {
