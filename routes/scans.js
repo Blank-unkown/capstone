@@ -1,12 +1,12 @@
 // routes/scans.js
 const express = require("express");
 const db = require("../db"); // ✅ promise pool
-const router = express.Router({ mergeParams: true });
-const multer = require("multer");
+const router = express.Router();
+//const multer = require("multer");
 
 // 📂 Setup multer for in-memory file storage
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+//const storage = multer.memoryStorage();
+//const upload = multer({ storage });
 
 /**
  * 📌 Create a scan AND save all answers in one flow.
@@ -19,115 +19,103 @@ const upload = multer({ storage });
  */
 
 /**
- * 📌 Create a scan (with uploaded images + answers)
+ * 📌 Create a scan (JSON body with base64 images + answers array)
  */
-router.post(
-  "/:classId/:subjectId/scans",
-  upload.fields([{ name: "header" }, { name: "sheet" }]),
-  async (req, res) => {
-    const { classId, subjectId } = req.params;
+router.post("/:classId/:subjectId/scans", async (req, res) => {
+  const { classId, subjectId } = req.params;
+  const { header_image, full_image, answers } = req.body;
 
-    // ✅ Images from FormData
-    const headerFile = req.files["header"]?.[0];
-    const sheetFile = req.files["sheet"]?.[0];
+  console.log("📥 Incoming scan:");
+  console.log("➡️ classId:", classId, "subjectId:", subjectId);
+  console.log("➡️ header_image length:", header_image ? header_image.length : "none");
+  console.log("➡️ full_image length:", full_image ? full_image.length : "none");
 
-    const header_image = headerFile
-      ? `data:${headerFile.mimetype};base64,${headerFile.buffer.toString("base64")}`
-      : null;
-    const full_image = sheetFile
-      ? `data:${sheetFile.mimetype};base64,${sheetFile.buffer.toString("base64")}`
-      : null;
-
-    // ✅ Metadata
-    const { answers } = req.body;
-
-    let parsedAnswers;
-    try {
-      parsedAnswers = JSON.parse(answers || "[]");
-    } catch {
-      return res.status(400).json({ error: "answers must be valid JSON" });
-    }
-
-    if (!Array.isArray(parsedAnswers)) {
-      return res.status(400).json({ error: "answers[] is required" });
-    }
-
-    const conn = await db.getConnection();
-    try {
-      await conn.beginTransaction();
-
-      // 1) Insert scan metadata
-      const [scanResult] = await conn.query(
-        `INSERT INTO scans (class_id, subject_id, header_image, full_image, score, total, timestamp)
-         VALUES (?, ?, ?, ?, 0, 0, NOW())`,
-        [classId, subjectId, header_image, full_image]
-      );
-      const scanId = scanResult.insertId;
-
-      // 2) Load the official answer key
-      const [keyRows] = await conn.query(
-        `SELECT question_number, correct_answer
-           FROM answer_keys
-          WHERE class_id = ? AND subject_id = ?
-          ORDER BY question_number ASC`,
-        [classId, subjectId]
-      );
-
-      if (!keyRows.length) {
-        throw new Error("No answer key found for this class/subject.");
-      }
-
-      // 3) Index marked answers
-      const markedMap = new Map();
-      for (const a of parsedAnswers) {
-        if (!a || typeof a.question_number !== "number") continue;
-        markedMap.set(a.question_number, a.marked ? a.marked.toUpperCase() : null);
-      }
-
-      // 4) Insert answers + compute score
-      let computedScore = 0;
-      let total = 0;
-
-      for (const k of keyRows) {
-        const qn = k.question_number;
-        const correctAns = k.correct_answer ? k.correct_answer.toUpperCase() : null;
-        const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
-
-        const isCorrect =
-          marked && correctAns && marked === correctAns ? 1 : 0;
-
-        await conn.query(
-          `INSERT INTO scan_answers (scan_id, question_number, marked, correct_answer, correct)
-           VALUES (?, ?, ?, ?, ?)`,
-          [scanId, qn, marked, correctAns, isCorrect]
-        );
-
-        total += 1;
-        computedScore += isCorrect;
-      }
-
-      // 5) Update scan with score/total
-      await conn.query(
-        `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
-        [computedScore, total, scanId]
-      );
-
-      await conn.commit();
-      return res.json({
-        message: "✅ Scan saved",
-        scanId,
-        score: computedScore,
-        total,
-      });
-    } catch (err) {
-      await conn.rollback();
-      console.error("❌ Error saving scan:", err);
-      return res.status(500).json({ error: "Failed to save scan" });
-    } finally {
-      conn.release();
-    }
+  let parsedAnswers;
+  try {
+    parsedAnswers = Array.isArray(answers) ? answers : JSON.parse(answers || "[]");
+  } catch {
+    return res.status(400).json({ error: "answers must be valid JSON" });
   }
-);
+
+  if (!Array.isArray(parsedAnswers)) {
+    return res.status(400).json({ error: "answers[] is required" });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) Insert scan metadata (score/total initially 0)
+    const [scanResult] = await conn.query(
+      `INSERT INTO scans (class_id, subject_id, header_image, full_image, score, total, timestamp)
+       VALUES (?, ?, ?, ?, 0, 0, NOW())`,
+      [classId, subjectId, header_image, full_image]
+    );
+    const scanId = scanResult.insertId;
+    console.log("✅ Inserted scanId:", scanId);
+
+    // 2) Load the official answer key
+    const [keyRows] = await conn.query(
+      `SELECT question_number, correct_answer
+         FROM answer_keys
+        WHERE class_id = ? AND subject_id = ?
+        ORDER BY question_number ASC`,
+      [classId, subjectId]
+    );
+
+    if (!keyRows.length) {
+      throw new Error("No answer key found for this class/subject.");
+    }
+
+    // 3) Index marked answers
+    const markedMap = new Map();
+    for (const a of parsedAnswers) {
+      if (!a || typeof a.question_number !== "number") continue;
+      markedMap.set(a.question_number, a.marked ? a.marked.toUpperCase() : null);
+    }
+
+    // 4) Insert answers + compute score
+    let computedScore = 0;
+    let total = 0;
+
+    for (const k of keyRows) {
+      const qn = k.question_number;
+      const correctAns = k.correct_answer ? k.correct_answer.toUpperCase() : null;
+      const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
+
+      const isCorrect = marked && correctAns && marked === correctAns ? 1 : 0;
+
+      await conn.query(
+        `INSERT INTO scan_answers (scan_id, question_number, marked, correct_answer, correct)
+         VALUES (?, ?, ?, ?, ?)`,
+        [scanId, qn, marked, correctAns, isCorrect]
+      );
+
+      total += 1;
+      computedScore += isCorrect;
+    }
+
+    // 5) Update scan with score/total
+    await conn.query(
+      `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
+      [computedScore, total, scanId]
+    );
+
+    await conn.commit();
+    return res.json({
+      message: "✅ Scan saved",
+      scanId,
+      score: computedScore,
+      total,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("❌ Error saving scan:", err);
+    return res.status(500).json({ error: "Failed to save scan", details: err.message });
+  } finally {
+    conn.release();
+  }
+});
 
 /**
  * 📌 Get all scans for a subject/class with recomputed score/total
@@ -136,7 +124,6 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
   const { classId, subjectId } = req.params;
 
   try {
-    // ✅ Get scans
     const [scans] = await db.query(
       "SELECT * FROM scans WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
@@ -146,7 +133,6 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
       return res.json([]);
     }
 
-    // ✅ Get answer_keys once (to know total questions)
     const [answerKeys] = await db.query(
       "SELECT question_number, correct_answer FROM answer_keys WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
@@ -154,7 +140,6 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
 
     const total = answerKeys.length;
 
-    // ✅ Attach computed score/total to each scan
     for (let scan of scans) {
       const [scanAnswers] = await db.query(
         `SELECT 
@@ -187,7 +172,6 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
   const { scanId, classId, subjectId } = req.params;
 
   try {
-    // ✅ Get scan info
     const [[scan]] = await db.query(
       "SELECT * FROM scans WHERE id = ? AND class_id = ? AND subject_id = ?",
       [scanId, classId, subjectId]
@@ -197,7 +181,6 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
       return res.status(404).json({ error: "Scan not found" });
     }
 
-    // ✅ Get answers joined with answer_keys
     const [scanAnswers] = await db.query(
       `SELECT 
          ak.question_number,
@@ -212,7 +195,6 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
       [scanId, classId, subjectId]
     );
 
-    // ✅ Compute score and total
     const total = scanAnswers.length;
     const score = scanAnswers.filter((a) => a.correct === 1).length;
 
