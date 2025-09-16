@@ -17,6 +17,7 @@ import jsQR from 'jsqr';
 import { ScanService } from '../../services/scan.service';
 import { ScanAnswerService } from '../../services/scanAnswer.service';
 import { Optional } from '@angular/core';
+import { AlertController } from '@ionic/angular';
 
 declare var cv: any;
 declare const Tesseract: any;
@@ -55,9 +56,7 @@ interface Question {
 interface AnswerSheet {
   id: number;
   teacher_id: number;
-  exam_title: string;
   subject: string;
-  grade_level: string;
   questions: Question[];
 }
 export interface Result {
@@ -179,9 +178,7 @@ export class ScanPage implements AfterViewInit {
   total: number = 0;
   detectedAnswers: { [questionNumber: string]: string | null } = {};
   hasResults: boolean = false;
-  examTitle!: string;
   subject!: string;
-  gradeLevel!: string;
   cvInitialized = false;
   tosRows: any[] = [];
   answerSheets: AnswerSheet[] = [];
@@ -202,6 +199,7 @@ export class ScanPage implements AfterViewInit {
     private preloader: PreloaderService,
     private scanService: ScanService,           // ✅ new
     private scanAnswerService: ScanAnswerService, // ✅ new
+    private alertCtrl: AlertController,
     @Optional() private androidPermissions?: AndroidPermissions,
   ) {}
  
@@ -245,9 +243,7 @@ export class ScanPage implements AfterViewInit {
             alert('❌ No answer key found for this subject!');
           }
         });
-        this.examTitle = params['examTitle'] || '';
         this.subject = params['subject'] || '';
-        this.gradeLevel = params['gradeLevel'] || '';
       });
       // ✅ Start camera only once here
       this.onStartCameraButtonClick();
@@ -458,11 +454,22 @@ onStartCameraButtonClick() {
         console.error('Error in processVideo:', error);
     }
     }
-async detectAndCropPaper(): Promise<ScannedResult | null> {
+
+    // helper
+  async presentAlert(header: string, message: string) {
+    const alert = await this.alertCtrl.create({
+      header,
+      message,
+      buttons: ['OK']
+    });
+    await alert.present();
+  }
+
+  async detectAndCropPaper(): Promise<ScannedResult | null> {
   const log = (...args: any[]) => console.log("[detectAndCropPaper]", ...args);
 
   try {
-    log("step=init");
+    this.presentAlert("Scan Step", "Init started");
     const canvas = this.canvasRef?.nativeElement;
     if (!canvas) throw new Error("Canvas element not found");
     const ctx = canvas.getContext("2d");
@@ -473,14 +480,17 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+    alert("✅ Canvas read + grayscale + blur applied");
 
     const markerCorners: { x: number; y: number }[] = [];
     if (!Array.isArray(this.detectionBoxes) || this.detectionBoxes.length === 0) {
       throw new Error("No detectionBoxes found");
     }
+    alert(`📦 detectionBoxes count: ${this.detectionBoxes.length}`);
 
     // 🔹 Detect 4 corners
-    for (const box of this.detectionBoxes) {
+    for (const [i, box] of this.detectionBoxes.entries()) {
+      alert(`🔍 Processing detectionBox ${i + 1}`);
       const roi = gray.roi(new cv.Rect(box.x, box.y, box.width, box.height));
       const roiContours = new cv.MatVector();
       const roiHierarchy = new cv.Mat();
@@ -511,8 +521,10 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
       }
 
       if (bestQuad) {
+        alert(`✅ Quad found in box ${i + 1}, area=${maxArea}`);
         markerCorners.push(bestQuad[0]); // just pick one
       } else {
+        alert(`⚠️ No quad in box ${i + 1}, using fallback center`);
         markerCorners.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
       }
 
@@ -523,6 +535,7 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     gray.delete();
 
     if (markerCorners.length !== 4) throw new Error("Expected 4 corners, got " + markerCorners.length);
+    alert("✅ Found 4 corners, ordering...");
 
     // 🔹 Order corners (TL, TR, BR, BL)
     markerCorners.sort((a, b) => a.y - b.y);
@@ -532,6 +545,7 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
 
     const FIXED_WIDTH = 800;
     const FIXED_HEIGHT = Math.round(800 * 1.414);
+    alert(`📐 Perspective target size: ${FIXED_WIDTH}x${FIXED_HEIGHT}`);
 
     const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
       ordered[0].x, ordered[0].y,
@@ -548,6 +562,7 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     const M = cv.getPerspectiveTransform(srcPoints, dstPoints);
     const dst = new cv.Mat();
     cv.warpPerspective(src, dst, M, new cv.Size(FIXED_WIDTH, FIXED_HEIGHT));
+    alert("✅ Perspective transform complete");
 
     // ✅ Save warpedMat for processSheet
     if (this.latestWarpedMat) this.latestWarpedMat.delete();
@@ -561,6 +576,7 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     // Disable detection boxes
     this.showDetectionBoxes = false;
     this.detectionBoxes = [];
+    alert("📸 Warped sheet drawn on canvas");
 
     // 🔹 Crop header
     const HEADER_HEIGHT = 250;
@@ -571,21 +587,24 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     cv.imshow(headerCanvas, headerMat);
     this.croppedHeaderBase64 = headerCanvas.toDataURL("image/jpeg", 0.8); // compressed JPEG
     headerMat.delete();
+    alert("📎 Header cropped + saved");
 
     // ✅ Log header + warped sizes
     const sizeKB = (b64: string) =>
       b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
 
-    log("📏 Size check:", {
-      headerImage: sizeKB(this.croppedHeaderBase64),
-      warpedCanvas: sizeKB(canvas.toDataURL("image/jpeg", 0.8))
-    });
+    const warpedSize = sizeKB(canvas.toDataURL("image/jpeg", 0.8));
+    const headerSize = sizeKB(this.croppedHeaderBase64);
+    alert(`📏 Size check: header=${headerSize}KB, warped=${warpedSize}KB`);
 
     // 🔹 Process bubbles + overlay + build result
     const overlayCtx = canvas.getContext("2d");
     let result: ScannedResult | null = null;
     if (overlayCtx) {
+      alert("🔄 Passing to processSheet...");
       result = await this.processSheet(overlayCtx);
+    } else {
+      alert("⚠️ overlayCtx missing, skipping processSheet");
     }
 
     // Cleanup mats
@@ -595,11 +614,12 @@ async detectAndCropPaper(): Promise<ScannedResult | null> {
     dstPoints.delete();
     M.delete();
 
-    log("step=done");
+    this.presentAlert("Scan Step", "Done detectAndCropPaper, proceeding to processSheet.");
     return result;
 
   } catch (err: any) {
-    console.error("Error in detectAndCropPaper:", err);
+    this.presentAlert("Error", "detectAndCropPaper failed: " + err.message);
+    alert("❌ detectAndCropPaper failed: " + err.message);
     return null;
   }
 }
@@ -615,29 +635,34 @@ dataURItoBlob(dataURI: string) {
   }
   return new Blob([ab], { type: mimeString });
 }
-
 // 🔹 Main handler after scanning
 async handleScanComplete() {
+  alert("📸 handleScanComplete: Starting detectAndCropPaper...");
   const result = await this.detectAndCropPaper();
   if (!result) {
     console.warn("⚠️ detectAndCropPaper returned null, skipping.");
+    alert("⚠️ detectAndCropPaper returned null, skipping.");
     return;
   }
 
   try {
+    alert("💾 handleScanComplete: Saving scan to backend...");
     // 1. Save scan to backend
     await this.saveScanToBackend(result);
 
+    alert("✅ handleScanComplete: Navigating to result viewer...");
     // 2. Navigate to result viewer
     this.goToResultViewer(result);
-  } catch (err) {
+  } catch (err: any) {
     console.error("❌ Failed to save scan", err);
-    alert("Failed to save scan to backend.");
+    alert("❌ Failed to save scan to backend: " + err.message);
   }
 }
 
 // 🔹 Save scanned result to backend (only one clean flow)
 async saveScanToBackend(result: ScannedResult): Promise<void> {
+  alert("💾 saveScanToBackend: Preparing safeResults...");
+
   const safeResults = result.answers.map(r => ({
     question: r.question,
     marked: r.marked ? String(r.marked) : null,
@@ -649,42 +674,47 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
   }));
 
   // ✅ Match backend schema
-  const scanData = {
-    exam_title: this.examTitle || "Untitled Exam",
-    grade_level: this.gradeLevel || "",
-    header_image: result.headerImage,
-    full_image: result.fullImage,
+    const scanData = {
+    subject_id: this.subjectId,
+    class_id: this.classId,
     score: result.score,
     total: result.total,
-    classId: this.classId,
-    subjectId: this.subjectId,
+    header_image: result.headerImage,
+    full_image: result.fullImage,
     timestamp: result.timestamp,
   };
+
+  alert("📡 saveScanToBackend: Sending scanData to backend...");
 
   return new Promise<void>((resolve, reject) => {
     this.scanService.createScan(this.classId, this.subjectId, scanData).subscribe({
       next: (res: any) => {
         const scanId = res.scanId;
+        alert("✅ saveScanToBackend: Scan saved with scanId=" + scanId);
 
         // ✅ Save answers separately
         this.scanAnswerService.saveAnswers(scanId, safeResults).subscribe({
           next: () => {
             console.log("✅ Scan + answers saved!");
+            alert("✅ saveScanToBackend: Answers saved successfully!");
             resolve();
           },
           error: (err: any) => {
             console.error("❌ Error saving answers:", err);
+            alert("❌ saveScanToBackend: Error saving answers - " + err.message);
             reject(err);
           }
         });
       },
       error: (err: any) => {
         console.error("❌ Error saving scan:", err);
+        alert("❌ saveScanToBackend: Error saving scan - " + err.message);
         reject(err);
       }
     });
   });
 }
+
 
 // 🔹 Detect bubbles, overlay, and build result object
 async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null> {
@@ -692,6 +722,7 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     alert("⚠️ processSheet: No warpedMat available.");
     return null;
   }
+  alert("✅ processSheet: warpedMat found, starting detection...");
 
   const toGray = (src: any) => {
     const gray = new cv.Mat();
@@ -721,7 +752,10 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   const canvas = this.canvasRef.nativeElement;
   cv.imshow(canvas, this.latestWarpedMat);
   const overlayCtx = canvas.getContext("2d");
-  if (!overlayCtx) return null;
+  if (!overlayCtx) {
+    alert("⚠️ processSheet: overlayCtx not found.");
+    return null;
+  }
 
   const ring = (x: number, y: number, r: number, color: string, lw = 2) => {
     overlayCtx.beginPath();
@@ -799,6 +833,9 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     });
     processed++;
 
+    // Debug alert per question
+    alert(`Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${isCorrect ? "✅ Correct" : "❌ Wrong"}`);
+
     // Draw overlay rings
     for (const opt of ["A", "B", "C", "D"] as const) {
       const { cx, cy, radius } = bubble.options[opt];
@@ -810,6 +847,10 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       ring(cx, cy, radius, color, 2);
     }
   }
+
+  // Final score alert
+  alert(`✅ Finished processing.\nScore: ${this.score} / ${this.total}`);
+
   // Draw score once
   overlayCtx.font = 'bold 32px Arial';
   overlayCtx.fillStyle = 'black';
@@ -818,24 +859,21 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
 
-  // ✅ Export images with compression + log sizes
+  // ✅ Export images with compression
   let warpedDataUrl = "";
   try {
-    warpedDataUrl = canvas.toDataURL("image/jpeg", 0.7); // JPEG compression
+    warpedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
   } catch (e) {
-    console.error("⚠️ Failed to export warpedDataUrl:", e);
+    alert("⚠️ Failed to export warpedDataUrl: " + e);
   }
 
   const headerBase64 = this.croppedHeaderBase64 ?? "";
 
-  // ✅ Log sizes
+  // ✅ Log sizes via alert
   const sizeKB = (b64: string) =>
     b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
 
-  console.log("📸 Image sizes (KB):", {
-    headerImage: sizeKB(headerBase64),
-    fullImage: sizeKB(warpedDataUrl)
-  });
+  alert("📸 Image sizes (KB): header=" + sizeKB(headerBase64) + ", full=" + sizeKB(warpedDataUrl));
 
   // ✅ Build answer distribution
   const answerDistribution = this.results.reduce((acc, a) => {
