@@ -458,48 +458,28 @@ onStartCameraButtonClick() {
         console.error('Error in processVideo:', error);
     }
     }
-
-async detectAndCropPaper() {
-  // Better logger that prints Error.message + stack, not just {}
-  const log = (...args: any[]) => {
-    const toStr = (a: any) => {
-      if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack ?? ''}`;
-      if (typeof a === 'object') {
-        try { return JSON.stringify(a); } catch { return String(a); }
-      }
-      return String(a);
-    };
-    const msg = '[detectAndCropPaper] ' + args.map(toStr).join(' ');
-    console.log(msg);
-    alert(msg);
-  };
+async detectAndCropPaper(): Promise<ScannedResult | null> {
+  const log = (...args: any[]) => console.log("[detectAndCropPaper]", ...args);
 
   try {
-    log('step=init');
+    log("step=init");
     const canvas = this.canvasRef?.nativeElement;
-    if (!canvas) throw new Error('Canvas element not found');
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas context missing');
+    if (!canvas) throw new Error("Canvas element not found");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas context missing");
 
     // Read canvas into OpenCV Mat
-    log('step=imread');
     const src = cv.imread(canvas);
-
-    // IMPORTANT: imread(canvas) -> RGBA (4-channel). Use RGBA2GRAY.
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
 
     const markerCorners: { x: number; y: number }[] = [];
-
     if (!Array.isArray(this.detectionBoxes) || this.detectionBoxes.length === 0) {
-      throw new Error('No detectionBoxes found');
+      throw new Error("No detectionBoxes found");
     }
 
-    log('step=process_boxes count=' + this.detectionBoxes.length);
-
-    // 🔹 Process detection boxes (used only for warping, NOT drawn later)
+    // 🔹 Detect 4 corners
     for (const box of this.detectionBoxes) {
       const roi = gray.roi(new cv.Rect(box.x, box.y, box.width, box.height));
       const roiContours = new cv.MatVector();
@@ -507,8 +487,8 @@ async detectAndCropPaper() {
       cv.threshold(roi, roi, 90, 255, cv.THRESH_BINARY_INV);
       cv.findContours(roi, roiContours, roiHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
+      let bestQuad: Array<{ x: number; y: number }> | null = null;
       let maxArea = 0;
-      let bestQuad: Array<{x:number;y:number}> | null = null;
 
       for (let i = 0; i < roiContours.size(); i++) {
         const cnt = roiContours.get(i);
@@ -531,18 +511,7 @@ async detectAndCropPaper() {
       }
 
       if (bestQuad) {
-        let target;
-        if (box.x < canvas.width / 2 && box.y < canvas.height / 2) target = { x: box.x, y: box.y };
-        else if (box.x < canvas.width / 2) target = { x: box.x, y: box.y + box.height };
-        else if (box.y < canvas.height / 2) target = { x: box.x + box.width, y: box.y };
-        else target = { x: box.x + box.width, y: box.y + box.height };
-
-        let minDist = Infinity, chosen = bestQuad[0];
-        for (const pt of bestQuad) {
-          const dist = Math.hypot(pt.x - target.x, pt.y - target.y);
-          if (dist < minDist) { minDist = dist; chosen = pt; }
-        }
-        markerCorners.push(chosen);
+        markerCorners.push(bestQuad[0]); // just pick one
       } else {
         markerCorners.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
       }
@@ -553,9 +522,9 @@ async detectAndCropPaper() {
     }
     gray.delete();
 
-    log('step=box_done corners=' + markerCorners.length);
-    if (markerCorners.length !== 4) throw new Error(`Detected ${markerCorners.length} corners, expected 4`);
+    if (markerCorners.length !== 4) throw new Error("Expected 4 corners, got " + markerCorners.length);
 
+    // 🔹 Order corners (TL, TR, BR, BL)
     markerCorners.sort((a, b) => a.y - b.y);
     const top = markerCorners.slice(0, 2).sort((a, b) => a.x - b.x);
     const bottom = markerCorners.slice(2, 4).sort((a, b) => a.x - b.x);
@@ -564,7 +533,6 @@ async detectAndCropPaper() {
     const FIXED_WIDTH = 800;
     const FIXED_HEIGHT = Math.round(800 * 1.414);
 
-    log('step=warp start');
     const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
       ordered[0].x, ordered[0].y,
       ordered[1].x, ordered[1].y,
@@ -572,97 +540,66 @@ async detectAndCropPaper() {
       ordered[3].x, ordered[3].y
     ]);
     const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0,  FIXED_WIDTH, 0,
-      FIXED_WIDTH, FIXED_HEIGHT,  0, FIXED_HEIGHT
+      0, 0,
+      FIXED_WIDTH, 0,
+      FIXED_WIDTH, FIXED_HEIGHT,
+      0, FIXED_HEIGHT
     ]);
     const M = cv.getPerspectiveTransform(srcPoints, dstPoints);
     const dst = new cv.Mat();
-    const dsize = new cv.Size(FIXED_WIDTH, FIXED_HEIGHT);
-    cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+    cv.warpPerspective(src, dst, M, new cv.Size(FIXED_WIDTH, FIXED_HEIGHT));
 
     // ✅ Save warpedMat for processSheet
     if (this.latestWarpedMat) this.latestWarpedMat.delete();
     this.latestWarpedMat = dst.clone();
 
-    // Show warped sheet only (no detection boxes)
+    // Show warped result
     canvas.width = FIXED_WIDTH;
     canvas.height = FIXED_HEIGHT;
     cv.imshow(canvas, dst);
 
-    // 🔹 Disable detection boxes permanently after warp
+    // Disable detection boxes
     this.showDetectionBoxes = false;
     this.detectionBoxes = [];
 
-    // Crop header
+    // 🔹 Crop header
     const HEADER_HEIGHT = 250;
     const headerMat = dst.roi(new cv.Rect(0, 0, dst.cols, HEADER_HEIGHT));
-    const headerCanvas = document.createElement('canvas');
+    const headerCanvas = document.createElement("canvas");
     headerCanvas.width = headerMat.cols;
     headerCanvas.height = headerMat.rows;
     cv.imshow(headerCanvas, headerMat);
-    this.croppedHeaderBase64 = headerCanvas.toDataURL('image/jpeg');
+    this.croppedHeaderBase64 = headerCanvas.toDataURL("image/jpeg", 0.8); // compressed JPEG
     headerMat.delete();
 
-    log('Header cropped & saved, length:', this.croppedHeaderBase64?.length ?? 0);
+    // ✅ Log header + warped sizes
+    const sizeKB = (b64: string) =>
+      b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
 
-    // ✅ Process sheet visually
-    const overlayCtx = canvas.getContext('2d');
+    log("📏 Size check:", {
+      headerImage: sizeKB(this.croppedHeaderBase64),
+      warpedCanvas: sizeKB(canvas.toDataURL("image/jpeg", 0.8))
+    });
+
+    // 🔹 Process bubbles + overlay + build result
+    const overlayCtx = canvas.getContext("2d");
     let result: ScannedResult | null = null;
     if (overlayCtx) {
-      try {
-        log('step=processSheet');
-        result = await this.processSheet();  // draws overlay rings, calculates score, sets this.score etc.
-
-        // Draw score overlay
-        overlayCtx.font = 'bold 32px Arial';
-        overlayCtx.fillStyle = 'black';
-        overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
-
-        // Navigate to ResultViewer if defined
-        if (typeof this.goToResultViewer === 'function') {
-          this.goToResultViewer(result);
-        }
-
-      } catch (err) {
-        log('processSheet error:', err);
-      }
+      result = await this.processSheet(overlayCtx);
     }
 
-    // ✅ Save to backend
-    if (result) {
-      this.scanService.createScan(this.classId, this.subjectId, result).subscribe({
-        next: (scanRes: any) => {
-          log('Scan saved to backend, id=' + scanRes.id);
-          this.scanAnswerService.saveAnswers(scanRes.id, result.answers).subscribe({
-            next: () => log('Answers saved successfully'),
-            error: e => log('Failed to save answers', e)
-          });
-        },
-        error: e => log('Failed to create scan', e)
-      });
-    }
-
-    // ✅ Cleanup Mats
+    // Cleanup mats
     src.delete();
     dst.delete();
     srcPoints.delete();
     dstPoints.delete();
     M.delete();
 
-    log('step=done');
+    log("step=done");
     return result;
 
   } catch (err: any) {
-    const msg = (err && err.message) ? `${err.name || 'Error'}: ${err.message}` : String(err);
-    log('Error in detectAndCropPaper:', msg);
-    console.error(err);
-
-    this.ngZone.run(() => {
-      this.showCroppedImage = false;
-      this.croppedImageUrl = null;
-      this.hasResults = false;
-    });
-
+    console.error("Error in detectAndCropPaper:", err);
     return null;
   }
 }
@@ -679,45 +616,11 @@ dataURItoBlob(dataURI: string) {
   return new Blob([ab], { type: mimeString });
 }
 
-// 🔹 Upload scan result + images
-async uploadScan(result: any) {
-  const formData = new FormData();
-
-  // ✅ Attach images (fallback "" if null)
-  if (this.croppedHeaderBase64) {
-    formData.append(
-      "header",
-      this.dataURItoBlob(this.croppedHeaderBase64 || ""),
-      "header.jpg"
-    );
-  }
-  if (this.latestWarpedMatBase64) {
-    formData.append(
-      "sheet",
-      this.dataURItoBlob(this.latestWarpedMatBase64 || ""),
-      "sheet.jpg"
-    );
-  }
-
-  // ✅ Attach metadata (numbers → String)
-  formData.append("classId", String(this.classId));
-  formData.append("subjectId", String(this.subjectId));
-  formData.append("score", String(this.score));
-  formData.append("answers", JSON.stringify(result.answers || {}));
-
-  this.http.post("https://capstone-wwbm.onrender.com/subjects/scans", formData).subscribe({
-    next: (res) => {
-      console.log("✅ Scan uploaded", res);
-      this.latestResult = res as any; // keep for later use
-    },
-    error: (err) => console.error("❌ Upload failed", err),
-  });
-}
 // 🔹 Main handler after scanning
 async handleScanComplete() {
-  const result = await this.processSheet();
+  const result = await this.detectAndCropPaper();
   if (!result) {
-    console.warn("⚠️ processSheet returned null, skipping.");
+    console.warn("⚠️ detectAndCropPaper returned null, skipping.");
     return;
   }
 
@@ -725,7 +628,7 @@ async handleScanComplete() {
     // 1. Save scan to backend
     await this.saveScanToBackend(result);
 
-    // 2. Navigate to result viewer with result object
+    // 2. Navigate to result viewer
     this.goToResultViewer(result);
   } catch (err) {
     console.error("❌ Failed to save scan", err);
@@ -733,8 +636,8 @@ async handleScanComplete() {
   }
 }
 
-// 🔹 Save scanned result to backend
-async saveScanToBackend(result: ScannedResult) {
+// 🔹 Save scanned result to backend (only one clean flow)
+async saveScanToBackend(result: ScannedResult): Promise<void> {
   const safeResults = result.answers.map(r => ({
     question: r.question,
     marked: r.marked ? String(r.marked) : null,
@@ -745,31 +648,45 @@ async saveScanToBackend(result: ScannedResult) {
     level: r.level || null
   }));
 
+  // ✅ Match backend schema
   const scanData = {
-    exam_title: this.examTitle || 'Untitled Exam',
-    grade_level: this.gradeLevel || '',
+    exam_title: this.examTitle || "Untitled Exam",
+    grade_level: this.gradeLevel || "",
     header_image: result.headerImage,
     full_image: result.fullImage,
     score: result.score,
     total: result.total,
     classId: this.classId,
-    subjectId: this.subjectId
+    subjectId: this.subjectId,
+    timestamp: result.timestamp,
   };
 
   return new Promise<void>((resolve, reject) => {
     this.scanService.createScan(this.classId, this.subjectId, scanData).subscribe({
       next: (res: any) => {
         const scanId = res.scanId;
+
+        // ✅ Save answers separately
         this.scanAnswerService.saveAnswers(scanId, safeResults).subscribe({
-          next: () => { console.log("✅ Scan + answers saved!"); resolve(); },
-          error: (err: any) => { console.error(err); reject(err); }
+          next: () => {
+            console.log("✅ Scan + answers saved!");
+            resolve();
+          },
+          error: (err: any) => {
+            console.error("❌ Error saving answers:", err);
+            reject(err);
+          }
         });
       },
-      error: (err: any) => { console.error(err); reject(err); }
+      error: (err: any) => {
+        console.error("❌ Error saving scan:", err);
+        reject(err);
+      }
     });
   });
 }
 
+// 🔹 Detect bubbles, overlay, and build result object
 async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null> {
   if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
     alert("⚠️ processSheet: No warpedMat available.");
@@ -795,8 +712,7 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   this.score = 0;
 
   // 🔹 Use preloaded TOS instead of LocalDataService
-  const tosRows = this.tosRows || []; // preload in ngAfterViewInit or fetch from backend
-
+  const tosRows = this.tosRows || [];
   const tosTotal = tosRows.reduce((sum, row) => sum + (row.expectedItems || 0), 0);
   const maxItems = tosTotal > 0 ? tosTotal : bubbles.length;
   this.total = maxItems;
@@ -894,8 +810,7 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       ring(cx, cy, radius, color, 2);
     }
   }
-
-  // Show score overlay
+  // Draw score once
   overlayCtx.font = 'bold 32px Arial';
   overlayCtx.fillStyle = 'black';
   overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
@@ -903,10 +818,26 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
 
-  // Prepare final result object for backend
+  // ✅ Export images with compression + log sizes
   let warpedDataUrl = "";
-  try { warpedDataUrl = canvas.toDataURL("image/jpeg"); } catch {}
+  try {
+    warpedDataUrl = canvas.toDataURL("image/jpeg", 0.7); // JPEG compression
+  } catch (e) {
+    console.error("⚠️ Failed to export warpedDataUrl:", e);
+  }
 
+  const headerBase64 = this.croppedHeaderBase64 ?? "";
+
+  // ✅ Log sizes
+  const sizeKB = (b64: string) =>
+    b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
+
+  console.log("📸 Image sizes (KB):", {
+    headerImage: sizeKB(headerBase64),
+    fullImage: sizeKB(warpedDataUrl)
+  });
+
+  // ✅ Build answer distribution
   const answerDistribution = this.results.reduce((acc, a) => {
     if (a.marked) acc[a.marked] = (acc[a.marked] || 0) + 1;
     return acc;
@@ -920,9 +851,10 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     return acc;
   }, {} as Record<string, {correct:number, total:number}>);
 
-    const result: ScannedResult = {
+  // ✅ Final result object
+  const result: ScannedResult = {
     id: Date.now(),
-    headerImage: this.croppedHeaderBase64 ?? "",
+    headerImage: headerBase64,
     fullImage: warpedDataUrl,
     answers: this.results,
     score: this.score,
@@ -936,10 +868,6 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   };
 
   kernel.delete();
-
-  // 👉 navigate to viewer immediately if you want
-  this.goToResultViewer(result);
-
   return result;
 }
 

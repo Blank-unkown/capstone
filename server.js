@@ -2,6 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 
+// ✅ Increase payload limit
+app.use(express.json({ limit: "10mb" })); 
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
+
 // ✅ Explicit CORS config
 app.use(cors({
   origin: "*",
