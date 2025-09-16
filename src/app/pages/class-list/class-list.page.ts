@@ -42,12 +42,14 @@ loadClasses() {
     next: (data) => {
       console.log("📥 Classes from backend:", data);
       this.classes = data;
+      console.log("📦 Stored in this.classes:", this.classes);
     },
     error: (err) => {
       console.error("❌ Error loading classes:", err);
     }
   });
 }
+
 
 addClass() {
   if (this.className.trim()) {
