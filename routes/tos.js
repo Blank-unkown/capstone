@@ -15,7 +15,7 @@ router.post("/:classId/:subjectId/tos", async (req, res) => {
     for (const entry of tos) {
       if (entry.id) {
         // Update existing row
-        await db.promise().query(
+        await db.query(
           `UPDATE tos_entries 
            SET topic_name=?, learning_competency=?, days=?, percent=?, expected_items=?,
                remembering=?, understanding=?, applying=?, analyzing=?, evaluating=?, creating=?
@@ -39,7 +39,7 @@ router.post("/:classId/:subjectId/tos", async (req, res) => {
         );
       } else {
         // Insert new row
-        const [result] = await db.promise().query(
+        const [result] = await db.query(
           `INSERT INTO tos_entries 
            (class_id, subject_id, topic_name, learning_competency, days, percent, expected_items,
             remembering, understanding, applying, analyzing, evaluating, creating)
@@ -101,7 +101,7 @@ router.put("/:classId/:subjectId/tos", async (req, res) => {
   try {
     for (const entry of tos) {
       if (!entry.id) continue; // skip rows with no ID
-      await db.promise().query(
+      await db.query(
         `UPDATE tos_entries 
          SET topic_name=?, learning_competency=?, days=?, percent=?, expected_items=?,
              remembering=?, understanding=?, applying=?, analyzing=?, evaluating=?, creating=?
@@ -141,12 +141,10 @@ router.get("/:classId/:subjectId/tos", async (req, res) => {
   console.log("➡️ GET TOS for classId:", classId, "subjectId:", subjectId);
 
   try {
-    const [rows] = await db
-      .promise()
-      .query(
-        "SELECT * FROM tos_entries WHERE class_id=? AND subject_id=? ORDER BY id ASC",
-        [classId, subjectId]
-      );
+    const [rows] = await db.query(
+      "SELECT * FROM tos_entries WHERE class_id=? AND subject_id=? ORDER BY id ASC",
+      [classId, subjectId]
+    );
 
     let itemCounter = 1;
     const mapped = rows.map((r) => {
@@ -154,7 +152,6 @@ router.get("/:classId/:subjectId/tos", async (req, res) => {
       const startQuestion = itemCounter;
       const endQuestion = itemCounter + expectedItems - 1;
 
-      // advance counter for next row
       itemCounter = endQuestion + 1;
 
       return {
@@ -172,7 +169,6 @@ router.get("/:classId/:subjectId/tos", async (req, res) => {
         analyzing: r.analyzing,
         evaluating: r.evaluating,
         creating: r.creating,
-        // 🔹 New fields
         startQuestion,
         endQuestion,
         numItems: expectedItems,
@@ -195,13 +191,15 @@ router.get("/:classId/:subjectId/tos", async (req, res) => {
 router.delete("/:classId/:subjectId/tos/:id", async (req, res) => {
   const { classId, subjectId, id } = req.params;
   try {
-    await db
-      .promise()
-      .query("DELETE FROM tos_entries WHERE id=? AND class_id=? AND subject_id=?", [
-        id,
-        classId,
-        subjectId,
-      ]);
+    const [result] = await db.query(
+      "DELETE FROM tos_entries WHERE id=? AND class_id=? AND subject_id=?",
+      [id, classId, subjectId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "TOS entry not found" });
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error("❌ Failed to delete TOS entry:", err);

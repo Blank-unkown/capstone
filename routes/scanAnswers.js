@@ -20,7 +20,7 @@ router.post("/:scanId/scan-answers", async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Find class/subject from the scan record
+    // ✅ Find class/subject from the scan record
     const [[scan]] = await conn.query(
       `SELECT class_id, subject_id FROM scans WHERE id = ?`,
       [scanId]
@@ -29,7 +29,7 @@ router.post("/:scanId/scan-answers", async (req, res) => {
       throw new Error("Scan not found.");
     }
 
-    // Load answer key
+    // ✅ Load answer key
     const [keyRows] = await conn.query(
       `SELECT question_number, correct_answer
          FROM answer_keys
@@ -41,17 +41,17 @@ router.post("/:scanId/scan-answers", async (req, res) => {
       throw new Error("No answer key found.");
     }
 
-    // Clear old answers
+    // ✅ Clear old answers
     await conn.query(`DELETE FROM scan_answers WHERE scan_id = ?`, [scanId]);
 
-    // Index marked answers
+    // ✅ Index marked answers
     const markedMap = new Map();
     for (const a of answers) {
       if (!a || typeof a.question_number !== "number") continue;
       markedMap.set(a.question_number, a.marked ?? null);
     }
 
-    // Insert full set
+    // ✅ Insert full set
     let score = 0;
     let total = 0;
 
@@ -76,7 +76,7 @@ router.post("/:scanId/scan-answers", async (req, res) => {
       score += isCorrect;
     }
 
-    // Update scan
+    // ✅ Update scan record
     await conn.query(
       `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
       [score, total, scanId]

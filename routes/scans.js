@@ -1,8 +1,9 @@
 // routes/scans.js
 const express = require("express");
-const db = require("../db");
+const db = require("../db"); // ✅ promise pool
 const router = express.Router({ mergeParams: true });
 const multer = require("multer");
+
 // 📂 Setup multer for in-memory file storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -20,7 +21,9 @@ const upload = multer({ storage });
 /**
  * 📌 Create a scan (with uploaded images + answers)
  */
-router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { name: "sheet" }]),
+router.post(
+  "/:classId/:subjectId/scans",
+  upload.fields([{ name: "header" }, { name: "sheet" }]),
   async (req, res) => {
     const { classId, subjectId } = req.params;
 
@@ -36,7 +39,7 @@ router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { na
       : null;
 
     // ✅ Metadata
-    const { score, answers } = req.body;
+    const { answers } = req.body;
 
     let parsedAnswers;
     try {
@@ -78,23 +81,20 @@ router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { na
       const markedMap = new Map();
       for (const a of parsedAnswers) {
         if (!a || typeof a.question_number !== "number") continue;
-        markedMap.set(a.question_number, a.marked ?? null);
+        markedMap.set(a.question_number, a.marked ? a.marked.toUpperCase() : null);
       }
 
-      // 4) Insert answers
+      // 4) Insert answers + compute score
       let computedScore = 0;
       let total = 0;
 
       for (const k of keyRows) {
         const qn = k.question_number;
-        const correctAns = k.correct_answer || null;
+        const correctAns = k.correct_answer ? k.correct_answer.toUpperCase() : null;
         const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
 
         const isCorrect =
-          marked && correctAns &&
-          String(marked).toUpperCase() === String(correctAns).toUpperCase()
-            ? 1
-            : 0;
+          marked && correctAns && marked === correctAns ? 1 : 0;
 
         await conn.query(
           `INSERT INTO scan_answers (scan_id, question_number, marked, correct_answer, correct)
@@ -113,7 +113,12 @@ router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { na
       );
 
       await conn.commit();
-      return res.json({ message: "✅ Scan saved", scanId, score: computedScore, total });
+      return res.json({
+        message: "✅ Scan saved",
+        scanId,
+        score: computedScore,
+        total,
+      });
     } catch (err) {
       await conn.rollback();
       console.error("❌ Error saving scan:", err);
@@ -121,7 +126,9 @@ router.post("/:classId/:subjectId/scans",upload.fields([{ name: "header" }, { na
     } finally {
       conn.release();
     }
-  });
+  }
+);
+
 /**
  * 📌 Get all scans for a subject/class with recomputed score/total
  */
@@ -130,7 +137,7 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
 
   try {
     // ✅ Get scans
-    const [scans] = await db.promise().query(
+    const [scans] = await db.query(
       "SELECT * FROM scans WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
     );
@@ -140,16 +147,16 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
     }
 
     // ✅ Get answer_keys once (to know total questions)
-    const [answerKeys] = await db.promise().query(
+    const [answerKeys] = await db.query(
       "SELECT question_number, correct_answer FROM answer_keys WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
     );
 
-    const total = answerKeys.length; // expected total per scan
+    const total = answerKeys.length;
 
     // ✅ Attach computed score/total to each scan
     for (let scan of scans) {
-      const [scanAnswers] = await db.promise().query(
+      const [scanAnswers] = await db.query(
         `SELECT 
            ak.question_number,
            ak.correct_answer,
@@ -162,7 +169,7 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
         [scan.id, classId, subjectId]
       );
 
-      scan.score = scanAnswers.filter(a => a.correct === 1).length;
+      scan.score = scanAnswers.filter((a) => a.correct === 1).length;
       scan.total = total;
     }
 
@@ -172,6 +179,7 @@ router.get("/:classId/:subjectId/scans", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch scans", details: err.message });
   }
 });
+
 /**
  * 📌 Get full scan details (scan + answers joined with answer_keys)
  */
@@ -180,7 +188,7 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
 
   try {
     // ✅ Get scan info
-    const [[scan]] = await db.promise().query(
+    const [[scan]] = await db.query(
       "SELECT * FROM scans WHERE id = ? AND class_id = ? AND subject_id = ?",
       [scanId, classId, subjectId]
     );
@@ -190,7 +198,7 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
     }
 
     // ✅ Get answers joined with answer_keys
-    const [scanAnswers] = await db.promise().query(
+    const [scanAnswers] = await db.query(
       `SELECT 
          ak.question_number,
          ak.correct_answer,
@@ -204,19 +212,15 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
       [scanId, classId, subjectId]
     );
 
-    // ✅ Compute score and total based on answer_keys
+    // ✅ Compute score and total
     const total = scanAnswers.length;
-    const score = scanAnswers.filter(a => a.correct === 1).length;
+    const score = scanAnswers.filter((a) => a.correct === 1).length;
 
-    // ✅ Return full object
     res.json({ ...scan, score, total, scanAnswers });
   } catch (err) {
     console.error("❌ Error fetching scan details:", err);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch scan details", details: err.message });
+    res.status(500).json({ error: "Failed to fetch scan details", details: err.message });
   }
 });
-
 
 module.exports = router;

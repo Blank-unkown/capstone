@@ -14,53 +14,62 @@ router.get("/:classId/:subjectId/results", async (req, res) => {
 
   try {
     // ✅ Ensure subject belongs to this user
-    const [check] = await db.promise().query(
+    const [check] = await db.query(
       `SELECT s.id 
-       FROM subjects s 
-       JOIN classes c ON s.class_id = c.id
-       WHERE s.id = ? AND s.class_id = ? AND c.user_id = ?`,
+         FROM subjects s 
+         JOIN classes c ON s.class_id = c.id
+        WHERE s.id = ? AND s.class_id = ? AND c.user_id = ?`,
       [subjectId, classId, user_id]
     );
 
     if (!check.length) {
       return res.status(404).json({ message: "Subject not found or not owned by user" });
     }
-    // 1. Get all scans for this subject
-    const [scans] = await db.promise().query(
-      "SELECT * FROM scans WHERE class_id = ? AND subject_id = ?",
+
+    // ✅ 1. Get all scans for this subject
+    const [scans] = await db.query(
+      `SELECT * FROM scans WHERE class_id = ? AND subject_id = ?`,
       [classId, subjectId]
     );
 
     if (!scans.length) {
-      return res.json({ results: [], meanPercentage: 0, distribution: [], answerDist: {}, cognitive: {}, competency: {} });
+      return res.json({
+        results: [],
+        meanPercentage: 0,
+        answerDist: { A: 0, B: 0, C: 0, D: 0 },
+        cognitive: {},
+        competency: {}
+      });
     }
 
-    // 2. Get all answers
-    const [answers] = await db.promise().query(
-      `SELECT sa.*, s.id as scan_id 
-       FROM scan_answers sa 
-       JOIN scans s ON s.id = sa.scan_id 
-       WHERE s.class_id = ? AND s.subject_id = ?`,
+    // ✅ 2. Get all answers joined with scans
+    const [answers] = await db.query(
+      `SELECT sa.*, s.id AS scan_id 
+         FROM scan_answers sa 
+         JOIN scans s ON s.id = sa.scan_id 
+        WHERE s.class_id = ? AND s.subject_id = ?`,
       [classId, subjectId]
     );
 
-    // 3. Build ScannedResult objects
+    // ✅ 3. Build results per scan
     const results = scans.map(s => {
-      const ans = answers.filter(a => a.scan_id === s.id).map(a => ({
-        question: a.question_number,
-        marked: a.marked,
-        correctAnswer: a.correct_answer,
-        correct: !!a.correct,
-        topic: a.topic,
-        competency: a.competency,
-        level: a.level,
-      }));
+      const ans = answers
+        .filter(a => a.scan_id === s.id)
+        .map(a => ({
+          question: a.question_number,
+          marked: a.marked,
+          correctAnswer: a.correct_answer,
+          correct: !!a.correct,
+          topic: a.topic,
+          competency: a.competency,
+          level: a.level,
+        }));
 
-      // Answer distribution
+      // Answer distribution for this scan
       const dist = { A: 0, B: 0, C: 0, D: 0 };
       ans.forEach(a => { if (a.marked) dist[a.marked]++; });
 
-      // Cognitive breakdown
+      // Cognitive breakdown for this scan
       const cog = {};
       ans.forEach(a => {
         const lvl = a.level || "N/A";
@@ -84,14 +93,20 @@ router.get("/:classId/:subjectId/results", async (req, res) => {
       };
     });
 
-    // 4. Compute subject-level aggregates
+    // ✅ 4. Compute subject-level aggregates
     const meanPercentage =
       results.reduce((sum, r) => sum + (r.score / r.total) * 100, 0) / results.length;
 
     const answerDist = { A: 0, B: 0, C: 0, D: 0 };
     const cognitive = {};
+
     results.forEach(r => {
-      Object.keys(r.answerDistribution).forEach(k => answerDist[k] += r.answerDistribution[k]);
+      // merge answer distribution
+      Object.keys(r.answerDistribution).forEach(k => {
+        answerDist[k] += r.answerDistribution[k];
+      });
+
+      // merge cognitive breakdown
       Object.entries(r.cognitiveBreakdown).forEach(([lvl, val]) => {
         if (!cognitive[lvl]) cognitive[lvl] = { correct: 0, total: 0 };
         cognitive[lvl].correct += val.correct;
@@ -99,12 +114,11 @@ router.get("/:classId/:subjectId/results", async (req, res) => {
       });
     });
 
-    // TODO: If you want competency breakdown, you’ll need your TOS mapping here.
-
+    // TODO: hook in TOS for competency breakdown if needed
     res.json({ results, meanPercentage, answerDist, cognitive });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to load results" });
+    console.error("❌ Error loading subject results:", err);
+    res.status(500).json({ error: "Failed to load results", details: err.message });
   }
 });
 
