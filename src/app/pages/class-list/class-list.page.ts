@@ -29,6 +29,11 @@ export class ClassListPage {
     ngOnInit() {
     this.loadClasses();
   }
+  
+  // ✅ This runs every time the page is shown (re-entered, resumed, or navigated to)
+  ionViewWillEnter() {
+    this.loadClasses();
+  }
 loadClasses() {
   const userId = this.authService.getCurrentUserId();
   console.log("🔑 Logged in userId:", userId);
