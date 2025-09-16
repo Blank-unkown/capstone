@@ -4,7 +4,7 @@ const app = express();
 
 // ✅ Explicit CORS config
 app.use(cors({
-  origin: ["http://localhost:8100", "https://capstone-wwbm.onrender.com"],
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));

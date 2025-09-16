@@ -9,6 +9,7 @@ const SECRET_KEY = "supersecretkey"; // change in production
 
 // Register
 router.post("/register", async (req, res) => {
+  console.log("📩 Register body:", req.body); // 👈 add this
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ message: "All fields are required" });
@@ -34,6 +35,7 @@ router.post("/register", async (req, res) => {
 
 // Login
 router.post("/login", async (req, res) => {
+  console.log("📩 Login body:", req.body); // 👈 add this
   const { email, password } = req.body;
 
   try {
