@@ -33,7 +33,6 @@ export interface ScannedResult {
   timestamp: string;
   answerDistribution: Record<'A'|'B'|'C'|'D', number>;
   cognitiveBreakdown: { [level: string]: { correct: number; total: number } };
-  // ✅ new field: snapshot of TOS rows
   tosRows: TopicEntry[];
 }
 export interface TopicEntry {
@@ -634,25 +633,25 @@ dataURItoBlob(dataURI: string) {
     ia[i] = byteString.charCodeAt(i);
   }
   return new Blob([ab], { type: mimeString });
-}
-// 🔹 Main handler after scanning
-async handleScanComplete() {
-  alert("📸 handleScanComplete: Starting detectAndCropPaper...");
-  const result = await this.detectAndCropPaper();
+}// 🔹 Main handler after scanning (now receives the result from processSheet)
+async handleScanComplete(result: ScannedResult) {
   if (!result) {
-    console.warn("⚠️ detectAndCropPaper returned null, skipping.");
-    alert("⚠️ detectAndCropPaper returned null, skipping.");
+    console.warn("⚠️ handleScanComplete received null result, skipping.");
+    alert("⚠️ handleScanComplete received null result, skipping.");
     return;
   }
 
   try {
     alert("💾 handleScanComplete: Saving scan to backend...");
+
     // 1. Save scan to backend
     await this.saveScanToBackend(result);
 
     alert("✅ handleScanComplete: Navigating to result viewer...");
+
     // 2. Navigate to result viewer
     this.goToResultViewer(result);
+
   } catch (err: any) {
     console.error("❌ Failed to save scan", err);
     alert("❌ Failed to save scan to backend: " + err.message);
@@ -674,9 +673,9 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
   }));
 
   // ✅ Match backend schema
-    const scanData = {
-    subject_id: this.subjectId,
-    class_id: this.classId,
+  const scanData = {
+    subject_id: result.subjectId,
+    class_id: result.classId,
     score: result.score,
     total: result.total,
     header_image: result.headerImage,
@@ -687,7 +686,7 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
   alert("📡 saveScanToBackend: Sending scanData to backend...");
 
   return new Promise<void>((resolve, reject) => {
-    this.scanService.createScan(this.classId, this.subjectId, scanData).subscribe({
+    this.scanService.createScan(result.classId, result.subjectId, scanData).subscribe({
       next: (res: any) => {
         const scanId = res.scanId;
         alert("✅ saveScanToBackend: Scan saved with scanId=" + scanId);
@@ -714,7 +713,6 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
     });
   });
 }
-
 
 // 🔹 Detect bubbles, overlay, and build result object
 async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null> {
@@ -906,6 +904,12 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   };
 
   kernel.delete();
+
+  // 🔹 Forward result to handler
+alert("📤 processSheet: Forwarding result to handleScanComplete...");
+await this.handleScanComplete(result);
+
+// 🔹 Also return for local use (if needed)
   return result;
 }
 
