@@ -783,6 +783,7 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       const gray = toGray(patch);
 
       const bin = new cv.Mat();
+      cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
       cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
 
       const mask = cv.Mat.zeros(h, w, cv.CV_8UC1);
