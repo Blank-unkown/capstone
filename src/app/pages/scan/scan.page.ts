@@ -717,9 +717,8 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
 }
 
 // 🔹 Detect bubbles, overlay, and build result object
-async processSheet(
-  ctx?: CanvasRenderingContext2D,
-  answerKey?: Record<number, string>
+async processSheet(ctx?: CanvasRenderingContext2D,
+answerKey?: Record<number, any> // allow object OR string
 ): Promise<ScannedResult | null> {
   if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
     alert("⚠️ processSheet: No warpedMat available.");
@@ -794,9 +793,8 @@ async processSheet(
       const bin = new cv.Mat();
       // ✅ OTSU first
       cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
-      // Check if OTSU result looks too empty (bad detection under shadow)
+      // Fallback if OTSU fails
       if (cv.countNonZero(bin) < 10) {
-        // Fallback: force fixed threshold
         cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
       }
 
@@ -837,13 +835,16 @@ async processSheet(
 
     // ✅ FIX: Normalize and fetch correct answer properly
     const rawCorrect = key[qNum];
-    const correctAnswer: Option | null =
-      rawCorrect && ["A", "B", "C", "D"].includes(rawCorrect)
-        ? (rawCorrect as Option)
-        : null;
+    let correctAnswer: Option | null = null;
+    if (typeof rawCorrect === "string") {
+      correctAnswer = ["A", "B", "C", "D"].includes(rawCorrect) ? rawCorrect as Option : null;
+    } else if (rawCorrect && typeof rawCorrect === "object" && "correct" in rawCorrect) {
+      const val = rawCorrect.correct;
+      correctAnswer = ["A", "B", "C", "D"].includes(val) ? val as Option : null;
+    }
 
     // Debug log correct answer fetch
-    alert(`Q${qNum}: rawCorrect=${rawCorrect}, parsed=${correctAnswer}`);
+    alert(`Q${qNum}: rawCorrect=${JSON.stringify(rawCorrect)}, parsed=${correctAnswer}`);
 
     const isCorrect = !!(selected && correctAnswer && selected === correctAnswer);
     if (isCorrect) this.score++;
