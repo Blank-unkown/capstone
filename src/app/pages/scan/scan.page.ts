@@ -601,8 +601,8 @@ onStartCameraButtonClick() {
     const overlayCtx = canvas.getContext("2d");
     let result: ScannedResult | null = null;
     if (overlayCtx) {
-      alert("🔄 Passing to processSheet...");
-      result = await this.processSheet(overlayCtx);
+      alert("🔄 Passing to processSheet with answerKey...");
+      result = await this.processSheet(overlayCtx, this.answerKey);
     } else {
       alert("⚠️ overlayCtx missing, skipping processSheet");
     }
@@ -717,12 +717,19 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
 }
 
 // 🔹 Detect bubbles, overlay, and build result object
-async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null> {
+async processSheet(
+  ctx?: CanvasRenderingContext2D,
+  answerKey?: Record<number, string>
+): Promise<ScannedResult | null> {
   if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
     alert("⚠️ processSheet: No warpedMat available.");
     return null;
   }
   alert("✅ processSheet: warpedMat found, starting detection...");
+
+  // ✅ Use provided answerKey or fallback to this.answerKey
+  const key = answerKey || this.answerKey || {};
+  alert("📌 processSheet: Loaded answerKey keys = " + Object.keys(key).join(", "));
 
   const toGray = (src: any) => {
     const gray = new cv.Mat();
@@ -795,7 +802,13 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
 
       const mask = cv.Mat.zeros(h, w, cv.CV_8UC1);
       const rx = Math.min(w, h) / 2 - 1;
-      cv.circle(mask, new cv.Point(Math.round(w / 2), Math.round(h / 2)), Math.round(rx), new cv.Scalar(255), -1);
+      cv.circle(
+        mask,
+        new cv.Point(Math.round(w / 2), Math.round(h / 2)),
+        Math.round(rx),
+        new cv.Scalar(255),
+        -1
+      );
 
       const masked = new cv.Mat();
       cv.bitwise_and(bin, mask, masked);
@@ -823,9 +836,14 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     }
 
     // ✅ FIX: Normalize and fetch correct answer properly
-    const rawCorrect = this.answerKey?.[qNum];
+    const rawCorrect = key[qNum];
     const correctAnswer: Option | null =
-      rawCorrect && ["A", "B", "C", "D"].includes(rawCorrect) ? (rawCorrect as Option) : null;
+      rawCorrect && ["A", "B", "C", "D"].includes(rawCorrect)
+        ? (rawCorrect as Option)
+        : null;
+
+    // Debug log correct answer fetch
+    alert(`Q${qNum}: rawCorrect=${rawCorrect}, parsed=${correctAnswer}`);
 
     const isCorrect = !!(selected && correctAnswer && selected === correctAnswer);
     if (isCorrect) this.score++;
@@ -845,7 +863,9 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
 
     // Debug alert per question
     alert(
-      `Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${isCorrect ? "✅ Correct" : "❌ Wrong"}`
+      `Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${
+        isCorrect ? "✅ Correct" : "❌ Wrong"
+      }`
     );
 
     // Draw overlay rings
@@ -864,9 +884,13 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   alert(`✅ Finished processing.\nScore: ${this.score} / ${this.total}`);
 
   // Draw score once
-  overlayCtx.font = 'bold 32px Arial';
-  overlayCtx.fillStyle = 'black';
-  overlayCtx.fillText(`Score: ${this.score ?? '-'} / ${this.total ?? '-'}`, 20, 50);
+  overlayCtx.font = "bold 32px Arial";
+  overlayCtx.fillStyle = "black";
+  overlayCtx.fillText(
+    `Score: ${this.score ?? "-"} / ${this.total ?? "-"}`,
+    20,
+    50
+  );
 
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
@@ -884,22 +908,29 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   // ✅ Log sizes via alert
   const sizeKB = (b64: string) =>
     b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
-
-  alert("📸 Image sizes (KB): header=" + sizeKB(headerBase64) + ", full=" + sizeKB(warpedDataUrl));
+  alert(
+    "📸 Image sizes (KB): header=" +
+      sizeKB(headerBase64) +
+      ", full=" +
+      sizeKB(warpedDataUrl)
+  );
 
   // ✅ Build answer distribution
-  const answerDistribution = this.results.reduce((acc, a) => {
-    if (a.marked) acc[a.marked] = (acc[a.marked] || 0) + 1;
-    return acc;
-  }, { A:0, B:0, C:0, D:0 });
+  const answerDistribution = this.results.reduce(
+    (acc, a) => {
+      if (a.marked) acc[a.marked] = (acc[a.marked] || 0) + 1;
+      return acc;
+    },
+    { A: 0, B: 0, C: 0, D: 0 }
+  );
 
   const cognitiveBreakdown = this.results.reduce((acc, a) => {
-    const lvl = a.level || 'N/A';
-    if (!acc[lvl]) acc[lvl] = { correct:0, total:0 };
+    const lvl = a.level || "N/A";
+    if (!acc[lvl]) acc[lvl] = { correct: 0, total: 0 };
     acc[lvl].total++;
     if (a.correct) acc[lvl].correct++;
     return acc;
-  }, {} as Record<string, {correct:number, total:number}>);
+  }, {} as Record<string, { correct: number; total: number }>);
 
   // ✅ Final result object
   const result: ScannedResult = {
@@ -923,7 +954,6 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   alert("📤 processSheet: Forwarding result to handleScanComplete...");
   await this.handleScanComplete(result);
 
-  // 🔹 Also return for local use (if needed)
   return result;
 }
 
