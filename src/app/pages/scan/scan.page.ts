@@ -717,18 +717,18 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
 }
 
 // 🔹 Detect bubbles, overlay, and build result object
-async processSheet(ctx?: CanvasRenderingContext2D,
-answerKey?: Record<number, any> // allow object OR string
+async processSheet(
+  ctx?: CanvasRenderingContext2D,
+  answerKey?: Record<number, any>
 ): Promise<ScannedResult | null> {
   if (!this.latestWarpedMat || this.latestWarpedMat.empty()) {
     alert("⚠️ processSheet: No warpedMat available.");
     return null;
   }
-  alert("✅ processSheet: warpedMat found, starting detection...");
 
   // ✅ Use provided answerKey or fallback to this.answerKey
   const key = answerKey || this.answerKey || {};
-  alert("📌 processSheet: Loaded answerKey keys = " + Object.keys(key).join(", "));
+  console.log("📌 processSheet: Loaded answerKey keys =", Object.keys(key));
 
   const toGray = (src: any) => {
     const gray = new cv.Mat();
@@ -772,6 +772,7 @@ answerKey?: Record<number, any> // allow object OR string
   };
 
   let processed = 0;
+  let summaryLog: string[] = [];
 
   for (const bubble of bubbles) {
     if (processed >= maxItems) break;
@@ -837,14 +838,11 @@ answerKey?: Record<number, any> // allow object OR string
     const rawCorrect = key[qNum];
     let correctAnswer: Option | null = null;
     if (typeof rawCorrect === "string") {
-      correctAnswer = ["A", "B", "C", "D"].includes(rawCorrect) ? rawCorrect as Option : null;
+      correctAnswer = ["A", "B", "C", "D"].includes(rawCorrect) ? (rawCorrect as Option) : null;
     } else if (rawCorrect && typeof rawCorrect === "object" && "correct" in rawCorrect) {
       const val = rawCorrect.correct;
-      correctAnswer = ["A", "B", "C", "D"].includes(val) ? val as Option : null;
+      correctAnswer = ["A", "B", "C", "D"].includes(val) ? (val as Option) : null;
     }
-
-    // Debug log correct answer fetch
-    alert(`Q${qNum}: rawCorrect=${JSON.stringify(rawCorrect)}, parsed=${correctAnswer}`);
 
     const isCorrect = !!(selected && correctAnswer && selected === correctAnswer);
     if (isCorrect) this.score++;
@@ -862,10 +860,10 @@ answerKey?: Record<number, any> // allow object OR string
 
     processed++;
 
-    // Debug alert per question
-    alert(
+    // 👉 Save summary instead of alert spam
+    summaryLog.push(
       `Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${
-        isCorrect ? "✅ Correct" : "❌ Wrong"
+        isCorrect ? "✅" : "❌"
       }`
     );
 
@@ -881,40 +879,31 @@ answerKey?: Record<number, any> // allow object OR string
     }
   }
 
-  // Final score alert
-  alert(`✅ Finished processing.\nScore: ${this.score} / ${this.total}`);
-
-  // Draw score once
-  overlayCtx.font = "bold 32px Arial";
-  overlayCtx.fillStyle = "black";
-  overlayCtx.fillText(
-    `Score: ${this.score ?? "-"} / ${this.total ?? "-"}`,
-    20,
-    50
-  );
-
+  // Final score
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
+
+  // ✅ One-time alert with summary
+  alert(
+    `✅ Finished processing.\nScore: ${this.score} / ${this.total}\n\nDetails:\n${summaryLog.join(
+      "\n"
+    )}`
+  );
+
+  // Draw score text
+  overlayCtx.font = "bold 32px Arial";
+  overlayCtx.fillStyle = "black";
+  overlayCtx.fillText(`Score: ${this.score ?? "-"} / ${this.total ?? "-"}`, 20, 50);
 
   // ✅ Export images with compression
   let warpedDataUrl = "";
   try {
     warpedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
   } catch (e) {
-    alert("⚠️ Failed to export warpedDataUrl: " + e);
+    console.error("⚠️ Failed to export warpedDataUrl:", e);
   }
 
   const headerBase64 = this.croppedHeaderBase64 ?? "";
-
-  // ✅ Log sizes via alert
-  const sizeKB = (b64: string) =>
-    b64 ? Math.round((b64.length * (3 / 4)) / 1024) : 0;
-  alert(
-    "📸 Image sizes (KB): header=" +
-      sizeKB(headerBase64) +
-      ", full=" +
-      sizeKB(warpedDataUrl)
-  );
 
   // ✅ Build answer distribution
   const answerDistribution = this.results.reduce(
@@ -952,7 +941,6 @@ answerKey?: Record<number, any> // allow object OR string
   kernel.delete();
 
   // 🔹 Forward result to handler
-  alert("📤 processSheet: Forwarding result to handleScanComplete...");
   await this.handleScanComplete(result);
 
   return result;
