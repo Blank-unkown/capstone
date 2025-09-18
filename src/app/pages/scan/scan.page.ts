@@ -18,6 +18,7 @@ import { ScanService } from '../../services/scan.service';
 import { ScanAnswerService } from '../../services/scanAnswer.service';
 import { Optional } from '@angular/core';
 import { AlertController } from '@ionic/angular';
+import { AnswerKeyService } from '../../services/answer-key.service';
 
 declare var cv: any;
 declare const Tesseract: any;
@@ -196,10 +197,11 @@ export class ScanPage implements AfterViewInit {
     private navCtrl: NavController,
     private route: ActivatedRoute,
     private cameraService: CameraService,
-    private preloader: PreloaderService,
-    private scanService: ScanService,           // ✅ new
+    private preloader: PreloaderService,         // ✅ new
     private scanAnswerService: ScanAnswerService, // ✅ new
     private alertCtrl: AlertController,
+      private answerKeyService: AnswerKeyService,
+  private scanService: ScanService,
     @Optional() private androidPermissions?: AndroidPermissions,
   ) {}
  
@@ -231,15 +233,17 @@ export class ScanPage implements AfterViewInit {
         });
         
     // ✅ Load Answer Key (typed map)
-        this.scanService.getAnswerKeyMap(this.subjectId).subscribe({
+    // ✅ Fetch Answer Key
+        this.answerKeyService.getAnswerKeyMap(this.classId, this.subjectId).subscribe({
           next: (keyMap) => {
             this.answerKey = keyMap;
             this.total = Object.keys(keyMap).length;
             console.log("✅ Answer Key Map (scan):", this.answerKey);
+            console.log("➡️ typeof keyMap:", typeof keyMap);
+            console.log("➡️ Keys:", Object.keys(keyMap));
           },
           error: (err) => {
             console.error("❌ Failed to load answer key", err);
-            alert('❌ No answer key found for this subject!');
           }
         });
       });
@@ -724,6 +728,10 @@ async processSheet(
     alert("⚠️ processSheet: No warpedMat available.");
     return null;
   }
+  if (!this.answerKey || Object.keys(this.answerKey).length === 0) {
+  console.warn("⚠️ No answer key loaded yet, skipping scoring overlays");
+  return null;
+}
 
   // ✅ Normalize answerKey (looser, old-style)
   const rawKey: Record<number, any> = answerKey || this.answerKey || {};
@@ -731,17 +739,8 @@ async processSheet(
   // Helper to coerce into Option | null
   const getCorrectAnswer = (qNum: number): Option | null => {
     const val = rawKey[qNum];
-    if (!val) return null;
-    if (typeof val === "string" && ["A", "B", "C", "D"].includes(val.toUpperCase())) {
-      return val.toUpperCase() as Option;
-    }
-    if (typeof val === "object") {
-      if (val.correct_answer) return val.correct_answer.toUpperCase() as Option;
-      if (val.correct) return val.correct.toUpperCase() as Option;
-    }
-    return null;
+    return val && ["A", "B", "C", "D"].includes(val) ? val as Option : null;
   };
-
   const toGray = (src: any) => {
     const gray = new cv.Mat();
     const code =
@@ -802,7 +801,7 @@ async processSheet(
       const bin = new cv.Mat();
       cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
       if (cv.countNonZero(bin) < 10) {
-        cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
+        cv.threshold(gray, bin, 130, 255, cv.THRESH_BINARY_INV);
       }
 
       const mask = cv.Mat.zeros(h, w, cv.CV_8UC1);
@@ -828,7 +827,7 @@ async processSheet(
 
     // 🔹 Detect marked answer
     let selected: Option | null = null;
-    let bestRatio = 0.55;
+    let bestRatio = 0.50;
     for (const opt of ["A", "B", "C", "D"] as const) {
       if (ratios[opt] > bestRatio) {
         bestRatio = ratios[opt];
