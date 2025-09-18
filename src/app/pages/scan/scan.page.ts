@@ -595,6 +595,7 @@ onStartCameraButtonClick() {
     const warpedSize = sizeKB(canvas.toDataURL("image/jpeg", 0.8));
     const headerSize = sizeKB(this.croppedHeaderBase64);
     alert(`📏 Size check: header=${headerSize}KB, warped=${warpedSize}KB`);
+    alert("📥 Answer key passed in: " + JSON.stringify(this.answerKey));
 
     // 🔹 Process bubbles + overlay + build result
     const overlayCtx = canvas.getContext("2d");
@@ -824,12 +825,13 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     this.results.push({
       question: qNum,
       marked: selected,
-      correctAnswer,
+      correctAnswer: correctAnswer,  // already normalized above
       correct: isCorrect,
       topic: bubble.topic ?? null,
       competency: bubble.competency ?? null,
       level: bubble.level ?? null,
     });
+
     processed++;
 
     // Debug alert per question
