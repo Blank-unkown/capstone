@@ -21,6 +21,7 @@ import { AlertController } from '@ionic/angular';
 
 declare var cv: any;
 declare const Tesseract: any;
+
 export interface ScannedResult {
   id: number;
   headerImage: string;
@@ -228,21 +229,19 @@ export class ScanPage implements AfterViewInit {
             this.tosRows = [];
           }
         });
-        // Load answer key via backend (instead of LocalDataService)
-        this.http.get<string[]>(`https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/answer-key`).subscribe({
-          next: (answerKey: string[]) => {
-            this.answerKey = {};
-            answerKey.forEach((ans, idx) => {
-              this.answerKey[idx + 1] = ans;
-            });
-            this.total = answerKey.length;
+        
+    // ✅ Load Answer Key (typed map)
+        this.scanService.getAnswerKeyMap(this.subjectId).subscribe({
+          next: (keyMap) => {
+            this.answerKey = keyMap;
+            this.total = Object.keys(keyMap).length;
+            console.log("✅ Answer Key Map (scan):", this.answerKey);
           },
           error: (err) => {
             console.error("❌ Failed to load answer key", err);
             alert('❌ No answer key found for this subject!');
           }
         });
-        this.subject = params['subject'] || '';
       });
       // ✅ Start camera only once here
       this.onStartCameraButtonClick();
@@ -726,9 +725,22 @@ async processSheet(
     return null;
   }
 
-  // ✅ Use provided answerKey or fallback to this.answerKey
-  const key = answerKey || this.answerKey || {};
-  console.log("📌 processSheet: Loaded answerKey keys =", Object.keys(key));
+  // ✅ Normalize answerKey (looser, old-style)
+  const rawKey: Record<number, any> = answerKey || this.answerKey || {};
+
+  // Helper to coerce into Option | null
+  const getCorrectAnswer = (qNum: number): Option | null => {
+    const val = rawKey[qNum];
+    if (!val) return null;
+    if (typeof val === "string" && ["A", "B", "C", "D"].includes(val.toUpperCase())) {
+      return val.toUpperCase() as Option;
+    }
+    if (typeof val === "object") {
+      if (val.correct_answer) return val.correct_answer.toUpperCase() as Option;
+      if (val.correct) return val.correct.toUpperCase() as Option;
+    }
+    return null;
+  };
 
   const toGray = (src: any) => {
     const gray = new cv.Mat();
@@ -748,20 +760,17 @@ async processSheet(
   this.results = [];
   this.score = 0;
 
-  // 🔹 Use preloaded TOS instead of LocalDataService
+  // 🔹 Use preloaded TOS
   const tosRows = this.tosRows || [];
   const tosTotal = tosRows.reduce((sum, row) => sum + (row.expectedItems || 0), 0);
   const maxItems = tosTotal > 0 ? tosTotal : bubbles.length;
   this.total = maxItems;
 
-  // ✅ Draw warped sheet on canvas
+  // ✅ Draw warped sheet
   const canvas = this.canvasRef.nativeElement;
   cv.imshow(canvas, this.latestWarpedMat);
   const overlayCtx = canvas.getContext("2d");
-  if (!overlayCtx) {
-    alert("⚠️ processSheet: overlayCtx not found.");
-    return null;
-  }
+  if (!overlayCtx) return null;
 
   const ring = (x: number, y: number, r: number, color: string, lw = 2) => {
     overlayCtx.beginPath();
@@ -772,13 +781,12 @@ async processSheet(
   };
 
   let processed = 0;
-  let summaryLog: string[] = [];
 
   for (const bubble of bubbles) {
     if (processed >= maxItems) break;
     const qNum = bubble.question as number;
 
-    const ratios: Record<"A" | "B" | "C" | "D", number> = { A: 0, B: 0, C: 0, D: 0 };
+    const ratios: Record<Option, number> = { A: 0, B: 0, C: 0, D: 0 };
 
     for (const opt of ["A", "B", "C", "D"] as const) {
       const { cx, cy, radius } = bubble.options[opt];
@@ -792,9 +800,7 @@ async processSheet(
       const gray = toGray(patch);
 
       const bin = new cv.Mat();
-      // ✅ OTSU first
       cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
-      // Fallback if OTSU fails
       if (cv.countNonZero(bin) < 10) {
         cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
       }
@@ -817,14 +823,10 @@ async processSheet(
       const totalPixels = Math.PI * rx * rx;
       ratios[opt] = nonZero / totalPixels;
 
-      patch.delete();
-      gray.delete();
-      bin.delete();
-      mask.delete();
-      masked.delete();
+      patch.delete(); gray.delete(); bin.delete(); mask.delete(); masked.delete();
     }
 
-    // Select best answer
+    // 🔹 Detect marked answer
     let selected: Option | null = null;
     let bestRatio = 0.55;
     for (const opt of ["A", "B", "C", "D"] as const) {
@@ -834,16 +836,8 @@ async processSheet(
       }
     }
 
-    // ✅ FIX: Normalize and fetch correct answer properly
-    const rawCorrect = key[qNum];
-    let correctAnswer: Option | null = null;
-    if (typeof rawCorrect === "string") {
-      correctAnswer = ["A", "B", "C", "D"].includes(rawCorrect) ? (rawCorrect as Option) : null;
-    } else if (rawCorrect && typeof rawCorrect === "object" && "correct" in rawCorrect) {
-      const val = rawCorrect.correct;
-      correctAnswer = ["A", "B", "C", "D"].includes(val) ? (val as Option) : null;
-    }
-
+    // 🔹 Correct answer (loose old-style but typed)
+    const correctAnswer = getCorrectAnswer(qNum);
     const isCorrect = !!(selected && correctAnswer && selected === correctAnswer);
     if (isCorrect) this.score++;
 
@@ -851,23 +845,15 @@ async processSheet(
     this.results.push({
       question: qNum,
       marked: selected,
-      correctAnswer: correctAnswer,
+      correctAnswer,
       correct: isCorrect,
       topic: bubble.topic ?? null,
       competency: bubble.competency ?? null,
       level: bubble.level ?? null,
     });
-
     processed++;
 
-    // 👉 Save summary instead of alert spam
-    summaryLog.push(
-      `Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${
-        isCorrect ? "✅" : "❌"
-      }`
-    );
-
-    // Draw overlay rings
+    // 🔹 Overlay
     for (const opt of ["A", "B", "C", "D"] as const) {
       const { cx, cy, radius } = bubble.options[opt];
       let color = "blue";
@@ -879,23 +865,11 @@ async processSheet(
     }
   }
 
-  // Final score
+  // Finalize score
   this.studentPercentage = this.total > 0 ? (this.score / this.total) * 100 : 0;
   this.hasResults = true;
 
-  // ✅ One-time alert with summary
-  alert(
-    `✅ Finished processing.\nScore: ${this.score} / ${this.total}\n\nDetails:\n${summaryLog.join(
-      "\n"
-    )}`
-  );
-
-  // Draw score text
-  overlayCtx.font = "bold 32px Arial";
-  overlayCtx.fillStyle = "black";
-  overlayCtx.fillText(`Score: ${this.score ?? "-"} / ${this.total ?? "-"}`, 20, 50);
-
-  // ✅ Export images with compression
+  // ✅ Convert canvas to DataURL
   let warpedDataUrl = "";
   try {
     warpedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
@@ -905,7 +879,6 @@ async processSheet(
 
   const headerBase64 = this.croppedHeaderBase64 ?? "";
 
-  // ✅ Build answer distribution
   const answerDistribution = this.results.reduce(
     (acc, a) => {
       if (a.marked) acc[a.marked] = (acc[a.marked] || 0) + 1;
@@ -922,7 +895,6 @@ async processSheet(
     return acc;
   }, {} as Record<string, { correct: number; total: number }>);
 
-  // ✅ Final result object
   const result: ScannedResult = {
     id: Date.now(),
     headerImage: headerBase64,
@@ -939,10 +911,7 @@ async processSheet(
   };
 
   kernel.delete();
-
-  // 🔹 Forward result to handler
   await this.handleScanComplete(result);
-
   return result;
 }
 
