@@ -634,7 +634,8 @@ dataURItoBlob(dataURI: string) {
     ia[i] = byteString.charCodeAt(i);
   }
   return new Blob([ab], { type: mimeString });
-}// 🔹 Main handler after scanning (now receives the result from processSheet)
+}
+// 🔹 Main handler after scanning (now receives the result from processSheet)
 async handleScanComplete(result: ScannedResult) {
   if (!result) {
     console.warn("⚠️ handleScanComplete received null result, skipping.");
@@ -784,8 +785,13 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       const gray = toGray(patch);
 
       const bin = new cv.Mat();
+      // ✅ OTSU first
       cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
-      cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
+      // Check if OTSU result looks too empty (bad detection under shadow)
+      if (cv.countNonZero(bin) < 10) {
+        // Fallback: force fixed threshold
+        cv.threshold(gray, bin, 125, 255, cv.THRESH_BINARY_INV);
+      }
 
       const mask = cv.Mat.zeros(h, w, cv.CV_8UC1);
       const rx = Math.min(w, h) / 2 - 1;
@@ -816,8 +822,11 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
       }
     }
 
-    const correctRaw = this.answerKey[qNum];
-    const correctAnswer: Option | null = isOption(correctRaw) ? correctRaw : null;
+    // ✅ FIX: Normalize and fetch correct answer properly
+    const rawCorrect = this.answerKey?.[qNum];
+    const correctAnswer: Option | null =
+      rawCorrect && ["A", "B", "C", "D"].includes(rawCorrect) ? (rawCorrect as Option) : null;
+
     const isCorrect = !!(selected && correctAnswer && selected === correctAnswer);
     if (isCorrect) this.score++;
 
@@ -825,7 +834,7 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     this.results.push({
       question: qNum,
       marked: selected,
-      correctAnswer: correctAnswer,  // already normalized above
+      correctAnswer: correctAnswer,
       correct: isCorrect,
       topic: bubble.topic ?? null,
       competency: bubble.competency ?? null,
@@ -835,7 +844,9 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
     processed++;
 
     // Debug alert per question
-    alert(`Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${isCorrect ? "✅ Correct" : "❌ Wrong"}`);
+    alert(
+      `Q${qNum}: Selected=${selected ?? "none"}, Correct=${correctAnswer ?? "none"}, ${isCorrect ? "✅ Correct" : "❌ Wrong"}`
+    );
 
     // Draw overlay rings
     for (const opt of ["A", "B", "C", "D"] as const) {
@@ -909,10 +920,10 @@ async processSheet(ctx?: CanvasRenderingContext2D): Promise<ScannedResult | null
   kernel.delete();
 
   // 🔹 Forward result to handler
-alert("📤 processSheet: Forwarding result to handleScanComplete...");
-await this.handleScanComplete(result);
+  alert("📤 processSheet: Forwarding result to handleScanComplete...");
+  await this.handleScanComplete(result);
 
-// 🔹 Also return for local use (if needed)
+  // 🔹 Also return for local use (if needed)
   return result;
 }
 
