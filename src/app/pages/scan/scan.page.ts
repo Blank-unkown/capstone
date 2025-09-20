@@ -667,11 +667,11 @@ async handleScanComplete(result: ScannedResult) {
 async saveScanToBackend(result: ScannedResult): Promise<void> {
   alert("💾 saveScanToBackend: Preparing safeResults...");
 
-  const safeResults = result.answers.map(r => ({
-    question: r.question,
-    marked: r.marked ? String(r.marked) : null,
-    correctAnswer: r.correctAnswer ? String(r.correctAnswer) : null,
-    correct: r.correct,
+  const safeResults = this.results.map(r => ({
+    question_number: r.question,                // from frontend "question"
+    selected_answer: r.marked ? String(r.marked) : null,
+    correct_answer: r.correctAnswer ? String(r.correctAnswer) : null,
+    is_correct: r.correct,
     topic: r.topic || null,
     competency: r.competency || null,
     level: r.level || null
@@ -686,6 +686,7 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
     header_image: result.headerImage,
     full_image: result.fullImage,
     timestamp: result.timestamp,
+    answers: safeResults   // ✅ send converted answers
   };
 
   alert("📡 saveScanToBackend: Sending scanData to backend...");
@@ -898,7 +899,7 @@ async processSheet(
     id: Date.now(),
     headerImage: headerBase64,
     fullImage: warpedDataUrl,
-    answers: this.results,
+    answers: this.results,   // ✅ already fixed if step 1 done
     score: this.score,
     total: this.total,
     subjectId: this.subjectId,
@@ -966,5 +967,5 @@ renderAnswerDistributionChart() {
 
 processResultsAndShowChart() {
   this.renderAnswerDistributionChart();
-}
+  }
 }
