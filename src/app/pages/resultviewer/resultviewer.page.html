@@ -45,7 +45,7 @@
           <h4>Items:</h4>
           <ul>
             <li *ngFor="let q of row.questions">
-              Q{{ q.qNum }} → Selected: {{ q.selected }} | Correct: {{ q.correct }}
+              Q{{ q.qNum }} → Selected: {{ q.selected }} | Correct: {{ q.correctAnswer }}
               <span [style.color]="q.isCorrect ? 'green' : 'red'">
                 ({{ q.isCorrect ? '✔' : '✘' }})
               </span>

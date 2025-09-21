@@ -2,7 +2,6 @@
 const express = require("express");
 const db = require("../db");
 const router = express.Router({ mergeParams: true });
-
 /**
  * 📌 Save scanned answers for a scan (legacy/optional).
  * Request body: { answers: [{ question_number, marked }] }
@@ -81,7 +80,6 @@ router.post("/:scanId/scan-answers", async (req, res) => {
       `UPDATE scans SET score = ?, total = ? WHERE id = ?`,
       [score, total, scanId]
     );
-
     await conn.commit();
     res.json({ message: "✅ Scanned answers saved", scanId, score, total });
   } catch (error) {
@@ -92,22 +90,28 @@ router.post("/:scanId/scan-answers", async (req, res) => {
     conn.release();
   }
 });
-
-/**
- * 📌 Get all scanned answers for a specific scan
- */
 router.get("/:scanId/scan-answers", async (req, res) => {
   const { scanId } = req.params;
 
   try {
     const [rows] = await db.query(
       `SELECT id, scan_id, question_number, marked, correct_answer, correct
-         FROM scan_answers
-        WHERE scan_id = ?
-        ORDER BY question_number`,
+       FROM scan_answers
+       WHERE scan_id = ?
+       ORDER BY question_number`,
       [scanId]
     );
-    res.json(rows);
+
+    const normalized = rows.map(r => ({
+      id: r.id,
+      scanId: r.scan_id,
+      question: r.question_number,
+      marked: r.marked,
+      correctAnswer: r.correct_answer,
+      correct: !!r.correct
+    }));
+
+    res.json(normalized);
   } catch (error) {
     console.error("❌ Error fetching scanned answers:", error);
     res.status(500).json({ message: "Failed to fetch scanned answers" });

@@ -1,41 +1,59 @@
+// routes/answer-key.js
 const express = require("express");
-const db = require("../db"); // already exports promise pool
+const db = require("../db"); // promise pool
 const router = express.Router();
 
 // ✅ Save Answer Key (replace old one)
 router.post("/:classId/:subjectId/answer-key", async (req, res) => {
   const { classId, subjectId } = req.params;
-  const answers = Array.isArray(req.body) ? req.body : [];
 
+  // Allow both { answers: [] } and [] directly
+  let answers = [];
+  if (Array.isArray(req.body)) {
+    answers = req.body;
+  } else if (Array.isArray(req.body.answers)) {
+    answers = req.body.answers;
+  }
+
+  const conn = await db.getConnection();
   try {
+    await conn.beginTransaction();
+
     // Delete old entries
-    await db.query(
+    await conn.query(
       "DELETE FROM answer_keys WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
     );
 
     // Insert new ones
     for (let i = 0; i < answers.length; i++) {
-      if (!answers[i]) continue;
-      await db.query(
-        "INSERT INTO answer_keys (class_id, subject_id, question_number, correct_answer) VALUES (?, ?, ?, ?)",
-        [classId, subjectId, i + 1, answers[i].toUpperCase()]
+      const ans = answers[i];
+      if (!ans) continue;
+      await conn.query(
+        `INSERT INTO answer_keys 
+           (class_id, subject_id, question_number, correct_answer) 
+         VALUES (?, ?, ?, ?)`,
+        [classId, subjectId, i + 1, String(ans).toUpperCase()]
       );
     }
 
+    await conn.commit();
     res.json({
       success: true,
       message: answers.length
         ? "✅ Answer Key saved!"
         : "✅ Answer Key cleared!",
       answers: answers.map((ans, i) => ({
-        questionNumber: i + 1,
-        correctAnswer: ans,
+        question: i + 1,
+        correctAnswer: String(ans).toUpperCase(),
       })),
     });
   } catch (err) {
+    await conn.rollback();
     console.error("❌ Error saving answer key:", err);
     res.status(500).json({ error: "Failed to save Answer Key" });
+  } finally {
+    conn.release();
   }
 });
 
@@ -49,14 +67,20 @@ router.get("/:classId/:subjectId/answer-key", async (req, res) => {
       [classId, subjectId]
     );
 
-    res.json(rows);
+    // Map DB → frontend shape
+    res.json(
+      rows.map((r) => ({
+        question: r.question_number,
+        correctAnswer: r.correct_answer,
+      }))
+    );
   } catch (err) {
     console.error("❌ Error fetching answer key:", err);
     res.status(500).json({ error: "Failed to fetch Answer Key" });
   }
 });
 
-// (Optional) ✅ Delete Answer Key
+// ✅ Delete Answer Key
 router.delete("/:classId/:subjectId/answer-key", async (req, res) => {
   const { classId, subjectId } = req.params;
 
