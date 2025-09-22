@@ -22,8 +22,8 @@ interface ScanAnswer {
 
 interface ScannedResult {
   id: number;
-  class_id: number;
-  subject_id: number;
+  classID: number;
+  subjectId: number;
   score: number;
   total: number;
   answers: ScanAnswer[];
@@ -224,7 +224,7 @@ viewScan(scan: ScannedResult) {
   this.router.navigate([
     '/resultviewer',
     this.classId,          // comes from your page
-    scan.subject_id,      // comes from scan object
+    scan.subjectId,      // comes from scan object
     scan.id                // scanId
   ]);
 }
@@ -247,49 +247,35 @@ async loadAnalysis() {
     return;
   }
 
+  const userId = this.authService.getCurrentUserId(); // ✅ get logged-in userId
+  if (!userId) {
+    console.error("❌ No userId found in authService");
+    return;
+  }
+
   try {
-    const url = `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/results`;
+    const url = `https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/results?user_id=${userId}`;
     console.log("📡 Fetching analysis from:", url);
 
     const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
     console.log("📊 Raw backend response:", data);
 
-    // Save analysis results in separate array
+    // ✅ Save analysis results
     this.analysisResults = data.results || [];
-    console.log("📌 Analysis results array:", this.analysisResults);
-
-    // If no analysis results, warn but DO NOT touch rawScans
-    if (!this.analysisResults.length) {
-      console.warn("⚠️ No analysis results found for this subject/class.");
-      // still set aggregated fields (may be empty/zero)
-    }
-
-    // Competency breakdown MUST use analysisResults (because it relies on answer details)
-    if (this.tos?.length && this.analysisResults.length) {
-      console.log("📚 TOS detected:", this.tos);
-      this.computeCompetencyBreakdown(); // updated to use analysisResults
-      console.log("✅ Competency Breakdown computed:", this.competencyBreakdown);
-    } else {
-      console.warn("⚠️ No TOS available or no analysis results, skipping competency breakdown.");
-    }
-
     this.meanPercentage = data.meanPercentage || 0;
-    console.log("📈 Mean Percentage:", this.meanPercentage);
-
     this.aggregatedAnswerDist = data.answerDist || { A: 0, B: 0, C: 0, D: 0 };
-    console.log("📊 Aggregated Answer Distribution:", this.aggregatedAnswerDist);
-
     this.aggregatedCognitive = data.cognitive || {};
-    console.log("🧠 Aggregated Cognitive:", this.aggregatedCognitive);
 
-    // computeDistribution should use rawScans so card values and distribution reflect the real saved scores
+    if (this.tos?.length && this.analysisResults.length) {
+      this.computeCompetencyBreakdown();
+    }
+
     this.computeDistribution();
-    console.log("📊 Score Distribution:", this.scoreDistribution);
 
     setTimeout(() => {
-      console.log("🎨 Rendering charts...");
       this.renderAggregatedAnswerChart();
       this.renderAggregatedCognitiveChart();
       this.renderScoreDistributionChart();

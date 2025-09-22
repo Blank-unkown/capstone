@@ -25,6 +25,11 @@ router.post("/:classId/:subjectId/scans", async (req, res) => {
   const { classId, subjectId } = req.params;
   const { header_image, full_image, answers } = req.body;
 
+  console.log("📥 Incoming scan:");
+  console.log("➡️ classId:", classId, "subjectId:", subjectId);
+  console.log("➡️ header_image length:", header_image ? header_image.length : "none");
+  console.log("➡️ full_image length:", full_image ? full_image.length : "none");
+
   let parsedAnswers;
   try {
     parsedAnswers = Array.isArray(answers) ? answers : JSON.parse(answers || "[]");
@@ -40,22 +45,24 @@ router.post("/:classId/:subjectId/scans", async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // 1) Insert scan (score/total start at 0)
+    // 1) Insert scan metadata (score/total initially 0)
     const [scanResult] = await conn.query(
       `INSERT INTO scans (class_id, subject_id, header_image, full_image, score, total, timestamp)
        VALUES (?, ?, ?, ?, 0, 0, NOW())`,
       [classId, subjectId, header_image, full_image]
     );
     const scanId = scanResult.insertId;
+    console.log("✅ Inserted scanId:", scanId);
 
-    // 2) Load official answer key
+    // 2) Load the official answer key
     const [keyRows] = await conn.query(
       `SELECT question_number, correct_answer
-       FROM answer_keys
-       WHERE class_id = ? AND subject_id = ?
-       ORDER BY question_number ASC`,
+         FROM answer_keys
+        WHERE class_id = ? AND subject_id = ?
+        ORDER BY question_number ASC`,
       [classId, subjectId]
     );
+
     if (!keyRows.length) {
       throw new Error("No answer key found for this class/subject.");
     }
@@ -69,12 +76,13 @@ router.post("/:classId/:subjectId/scans", async (req, res) => {
 
     // 4) Insert answers + compute score
     let computedScore = 0;
-    let total = keyRows.length;
+    let total = 0;
 
     for (const k of keyRows) {
       const qn = k.question_number;
       const correctAns = k.correct_answer ? k.correct_answer.toUpperCase() : null;
-      const marked = markedMap.get(qn) || null;
+      const marked = markedMap.has(qn) ? markedMap.get(qn) : null;
+
       const isCorrect = marked && correctAns && marked === correctAns ? 1 : 0;
 
       await conn.query(
@@ -83,6 +91,7 @@ router.post("/:classId/:subjectId/scans", async (req, res) => {
         [scanId, qn, marked, correctAns, isCorrect]
       );
 
+      total += 1;
       computedScore += isCorrect;
     }
 
@@ -93,91 +102,107 @@ router.post("/:classId/:subjectId/scans", async (req, res) => {
     );
 
     await conn.commit();
-    res.json({ message: "✅ Scan saved", scanId, score: computedScore, total });
+    return res.json({
+      message: "✅ Scan saved",
+      scanId,
+      score: computedScore,
+      total,
+    });
   } catch (err) {
     await conn.rollback();
     console.error("❌ Error saving scan:", err);
-    res.status(500).json({ error: "Failed to save scan", details: err.message });
+    return res.status(500).json({ error: "Failed to save scan", details: err.message });
   } finally {
     conn.release();
   }
 });
+
 /**
- * 📌 Get all scans for a subject/class
+ * 📌 Get all scans for a subject/class with recomputed score/total
  */
 router.get("/:classId/:subjectId/scans", async (req, res) => {
   const { classId, subjectId } = req.params;
+
   try {
     const [scans] = await db.query(
-      "SELECT * FROM scans WHERE class_id = ? AND subject_id = ? ORDER BY timestamp DESC",
+      "SELECT * FROM scans WHERE class_id = ? AND subject_id = ?",
       [classId, subjectId]
     );
 
-    const normalized = scans.map(s => ({
-      id: s.id,
-      headerImage: s.header_image,
-      fullImage: s.full_image,
-      score: s.score,
-      total: s.total,
-      subjectId: s.subject_id,
-      classId: s.class_id,
-      timestamp: s.timestamp
-    }));
+    if (scans.length === 0) {
+      return res.json([]);
+    }
 
-    res.json(normalized);
+    const [answerKeys] = await db.query(
+      "SELECT question_number, correct_answer FROM answer_keys WHERE class_id = ? AND subject_id = ?",
+      [classId, subjectId]
+    );
+
+    const total = answerKeys.length;
+
+    for (let scan of scans) {
+      const [scanAnswers] = await db.query(
+        `SELECT 
+           ak.question_number,
+           ak.correct_answer,
+           sa.marked,
+           (CASE WHEN sa.marked = ak.correct_answer THEN 1 ELSE 0 END) AS correct
+         FROM answer_keys ak
+         LEFT JOIN scan_answers sa 
+           ON sa.scan_id = ? AND sa.question_number = ak.question_number
+         WHERE ak.class_id = ? AND ak.subject_id = ?`,
+        [scan.id, classId, subjectId]
+      );
+
+      scan.score = scanAnswers.filter((a) => a.correct === 1).length;
+      scan.total = total;
+    }
+
+    res.json(scans);
   } catch (err) {
     console.error("❌ Error fetching scans:", err);
     res.status(500).json({ error: "Failed to fetch scans", details: err.message });
   }
 });
 
-/**
+/** 
  * 📌 Get full scan details (scan + answers joined with answer_keys)
  */
 router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
   const { scanId, classId, subjectId } = req.params;
+
   try {
     const [[scan]] = await db.query(
       "SELECT * FROM scans WHERE id = ? AND class_id = ? AND subject_id = ?",
       [scanId, classId, subjectId]
     );
-    if (!scan) return res.status(404).json({ error: "Scan not found" });
+
+    if (!scan) {
+      return res.status(404).json({ error: "Scan not found" });
+    }
 
     const [scanAnswers] = await db.query(
       `SELECT 
-         ak.question_number,
+         ak.question_number,  
          ak.correct_answer,
          sa.marked,
          (CASE WHEN sa.marked = ak.correct_answer THEN 1 ELSE 0 END) AS correct
        FROM answer_keys ak
-       LEFT JOIN scan_answers sa
+       LEFT JOIN scan_answers sa 
          ON sa.scan_id = ? AND sa.question_number = ak.question_number
        WHERE ak.class_id = ? AND ak.subject_id = ?
        ORDER BY ak.question_number ASC`,
       [scanId, classId, subjectId]
     );
 
-    const normalizedAnswers = scanAnswers.map(a => ({
-      question: a.question_number,
-      marked: a.marked,
-      correctAnswer: a.correct_answer,
-      correct: !!a.correct
-    }));
+    const total = scanAnswers.length;
+    const score = scanAnswers.filter((a) => a.correct === 1).length;
 
-    res.json({
-      id: scan.id,
-      headerImage: scan.header_image,
-      fullImage: scan.full_image,
-      score: scan.score,
-      total: scan.total,
-      subjectId: scan.subject_id,
-      classId: scan.class_id,
-      timestamp: scan.timestamp,
-      answers: normalizedAnswers
-    });
+    res.json({ ...scan, score, total, scanAnswers });
   } catch (err) {
     console.error("❌ Error fetching scan details:", err);
     res.status(500).json({ error: "Failed to fetch scan details", details: err.message });
   }
 });
+
 module.exports = router;

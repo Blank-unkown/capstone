@@ -37,6 +37,8 @@ export interface TopicEntry {
 }
 
 export interface ScannedResult {
+  //classID: number;
+  //subjectID: number;
   id: number;
   score: number;
   total: number;
