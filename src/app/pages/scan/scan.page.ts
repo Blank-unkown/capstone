@@ -639,6 +639,7 @@ dataURItoBlob(dataURI: string) {
   return new Blob([ab], { type: mimeString });
 }
 // 🔹 Main handler after scanning (now receives the result from processSheet)
+// 🔹 Main handler after scanning (receives the result from processSheet)
 async handleScanComplete(result: ScannedResult) {
   if (!result) {
     console.warn("⚠️ handleScanComplete received null result, skipping.");
@@ -649,7 +650,7 @@ async handleScanComplete(result: ScannedResult) {
   try {
     alert("💾 handleScanComplete: Saving scan to backend...");
 
-    // 1. Save scan to backend
+    // 1. Save scan + answers
     await this.saveScanToBackend(result);
 
     alert("✅ handleScanComplete: Navigating to result viewer...");
@@ -663,15 +664,16 @@ async handleScanComplete(result: ScannedResult) {
   }
 }
 
-// 🔹 Save scanned result to backend (only one clean flow)
+// 🔹 Save scanned result to backend (scan + answers)
 async saveScanToBackend(result: ScannedResult): Promise<void> {
   alert("💾 saveScanToBackend: Preparing safeResults...");
 
-  const safeResults = this.results.map(r => ({
-    question_number: r.question,                // from frontend "question"
-    selected_answer: r.marked ? String(r.marked) : null,
+  // ✅ Convert answers safely from result.answers
+  const safeResults = (result.answers || []).map(r => ({
+    question_number: r.question,
+    marked: r.marked ? String(r.marked) : null,     // ✅ match DB column
     correct_answer: r.correctAnswer ? String(r.correctAnswer) : null,
-    is_correct: r.correct,
+    correct: r.correct,                             // ✅ boolean/0/1 based on backend
     topic: r.topic || null,
     competency: r.competency || null,
     level: r.level || null
@@ -686,7 +688,7 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
     header_image: result.headerImage,
     full_image: result.fullImage,
     timestamp: result.timestamp,
-    answers: safeResults   // ✅ send converted answers
+    answers: safeResults
   };
 
   alert("📡 saveScanToBackend: Sending scanData to backend...");
@@ -697,7 +699,7 @@ async saveScanToBackend(result: ScannedResult): Promise<void> {
         const scanId = res.scanId;
         alert("✅ saveScanToBackend: Scan saved with scanId=" + scanId);
 
-        // ✅ Save answers separately
+        // ✅ Save answers separately linked to scanId
         this.scanAnswerService.saveAnswers(scanId, safeResults).subscribe({
           next: () => {
             console.log("✅ Scan + answers saved!");

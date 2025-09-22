@@ -125,9 +125,9 @@ private loadFromDb() {
         fullImage: scan.full_image ?? null,
         answers: (scan.scanAnswers ?? []).map((a: any) => ({
           question: a.question_number,
-          marked: a.marked ?? null,
+          marked: a.selected_answer ?? null,   // ✅ match backend
           correctAnswer: a.correct_answer ?? null,
-          correct: !!a.correct,
+          correct: !!a.is_correct,             // ✅ match backend too
           topic: a.topic ?? null,
           competency: a.competency ?? null,
         })),
@@ -271,10 +271,10 @@ buildTosRowView(tosRows: TopicEntry[]): any[] {
       if (ans) ans.level = level; // ✅ attach cognitive level to main answers array
 
       questions.push({
-        qNum: q,
-        selected: ans?.marked ?? '—',
-        correct: ans?.correctAnswer ?? '—',
-        isCorrect: ans?.correct ?? false,
+        question: q,
+        marked: ans?.marked ?? null,
+        correctAnswer: ans?.correctAnswer ?? null,
+        correct: ans?.correct ?? false,
         topic: row.topicName,
         competency: row.learningCompetency,
         level

@@ -220,14 +220,18 @@ deleteScan(resultId: number) {
     });
 }
 // 🔹 View a single scan
-viewScan(scan: ScannedResult) {
+// 🔹 View a single scan
+viewScan(scan: any) {
+  console.log("🧭 Navigating with:", scan);
+
   this.router.navigate([
-    '/resultviewer',
-    this.classId,          // comes from your page
-    scan.subjectId,      // comes from scan object
-    scan.id                // scanId
+    "/resultviewer",
+    scan.class_id,   // ✅ match backend response
+    scan.subject_id, // ✅ match backend response
+    scan.id          // ✅ scan id
   ]);
 }
+
 
 // 🔹 View scan by ID (if you only have ID)
 viewResult(scanId: number, subjectId: number) {
