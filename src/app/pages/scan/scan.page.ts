@@ -601,9 +601,32 @@ onStartCameraButtonClick() {
     alert("📥 Answer key passed in: " + JSON.stringify(this.answerKey));
 
     // 🔹 Process bubbles + overlay + build result
+    // 🔹 Process bubbles + overlay + build result
     const overlayCtx = canvas.getContext("2d");
     let result: ScannedResult | null = null;
+
     if (overlayCtx) {
+      // ✅ Ensure answerKey is available before processing
+      if ((!this.answerKey || Object.keys(this.answerKey).length === 0) && this.answerKeyService) {
+        try {
+          const arr = await this.answerKeyService
+            .getAnswerKey(this.classId, this.subjectId)
+            .toPromise();
+
+          // Normalize into { [qNum]: 'A' | 'B' | 'C' | 'D' }
+          this.answerKey = {};
+          for (const it of arr || []) {
+            const qnum = Number(it.question ?? it.question_number);
+            if (!Number.isNaN(qnum) && it.correctAnswer) {
+              this.answerKey[qnum] = String(it.correctAnswer).toUpperCase();
+            }
+          }
+          console.log("✅ detectAndCropPaper: answerKey loaded before processing:", this.answerKey);
+        } catch (e) {
+          console.warn("⚠️ detectAndCropPaper: Could not load answerKey before processing:", e);
+        }
+      }
+
       alert("🔄 Passing to processSheet with answerKey...");
       result = await this.processSheet(overlayCtx, this.answerKey);
     } else {
@@ -731,14 +754,16 @@ async processSheet(
     alert("⚠️ processSheet: No warpedMat available.");
     return null;
   }
-  if (!this.answerKey || Object.keys(this.answerKey).length === 0) {
-  console.warn("⚠️ No answer key loaded yet, skipping scoring overlays");
-  return null;
-}
 
-  // ✅ Normalize answerKey (looser, old-style)
+  // allow either the passed-in answerKey param OR this.answerKey
+  if ((!answerKey || Object.keys(answerKey).length === 0) &&
+      (!this.answerKey || Object.keys(this.answerKey).length === 0)) {
+    console.warn("⚠️ No answer key available — overlays that need the key will be disabled.");
+    // DO NOT return; proceed (we'll just have rawKey === {})
+  }
+
+  // rawKey will be the passed answerKey (preferred) or this.answerKey or empty {}
   const rawKey: Record<number, any> = answerKey || this.answerKey || {};
-
   // Helper to coerce into Option | null
   const getCorrectAnswer = (qNum: number): Option | null => {
     const val = rawKey[qNum];

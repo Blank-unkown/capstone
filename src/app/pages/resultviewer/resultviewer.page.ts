@@ -109,13 +109,18 @@ ngOnInit() {
 
   this.loadFromDb();
 }
-
 private loadFromDb() {
   forkJoin({
     scan: this.scanService.getScan(this.classId, this.subjectId, this.resultId),
     tosRows: this.tosService.getTOS(this.classId, this.subjectId),
   }).subscribe({
     next: ({ scan, tosRows }) => {
+      console.log('RAW /scans/:scanId response (scan):', scan);
+      console.log('scan.scanAnswers:', scan?.scanAnswers);
+      console.log('scan.answers:', scan?.answers);
+
+      const rawAnswers = scan.scanAnswers ?? scan.answers ?? [];
+
       this.result = {
         id: scan.id,
         score: scan.score ?? 0,
@@ -124,22 +129,24 @@ private loadFromDb() {
         headerImage: scan.header_image ?? null,
         fullImage: scan.full_image ?? null,
         answers: (scan.scanAnswers ?? []).map((a: any) => ({
-          question: a.question_number,
-          marked: a.selected_answer ?? null,   // ✅ match backend
-          correctAnswer: a.correct_answer ?? null,
-          correct: !!a.is_correct,             // ✅ match backend too
+          question: a.question_number ?? a.question,
+          marked: a.marked ?? a.selected_answer ?? null,
+          correctAnswer: a.correct_answer ?? a.correctAnswer ?? null,
+          correct: !!(a.correct ?? a.is_correct),
           topic: a.topic ?? null,
           competency: a.competency ?? null,
+          level: a.level ?? null
         })),
+
         tosRows: tosRows ?? [],
       };
 
-      console.log("✅ Result loaded:", this.result);
+      console.log("✅ Result loaded (normalized):", this.result);
 
       this.buildTosAnalysis();
       this.tosRowView = this.result?.tosRows ? this.buildTosRowView(this.result.tosRows) : [];
-      this.dataReady = true;   // ✅ add this
-      this.tryRenderCharts();  // instead of direct renderAllCharts()
+      this.dataReady = true;
+      this.tryRenderCharts();
     },
     error: (err) => {
       console.error('❌ Failed to load scan/TOS from DB:', err);
