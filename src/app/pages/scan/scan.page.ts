@@ -205,51 +205,59 @@ export class ScanPage implements AfterViewInit {
     @Optional() private androidPermissions?: AndroidPermissions,
   ) {}
  
-  async ngAfterViewInit() {
-      await this.waitForVideoElement();
-      // Load OpenCV
-      await this.waitForOpenCV();
-      // Load answer key from params
-      this.route.queryParams.subscribe(params => {
-        this.classId = Number(params['classId']);
-        this.subjectId = Number(params['subjectId']);
-        this.scanService.getScans(this.classId, this.subjectId).subscribe({
-          next: (scans) => {
-            // You could preload scans if needed
-            console.log("✅ Loaded scans:", scans);
-          },
-          error: (err) => {
-            console.error("❌ Failed to load scans", err);
-          }
-        })
-        this.http.get<any[]>(`https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`).subscribe({
-          next: (tos: any[]) => {
-            this.tosRows = tos;
-          },
-          error: (err) => {
-            console.error("❌ Failed to load TOS", err);
-            this.tosRows = [];
-          }
-        });
-        
-    // ✅ Load Answer Key (typed map)
-    // ✅ Fetch Answer Key
-        this.answerKeyService.getAnswerKeyMap(this.classId, this.subjectId).subscribe({
-          next: (keyMap) => {
-            this.answerKey = keyMap;
-            this.total = Object.keys(keyMap).length;
-            console.log("✅ Answer Key Map (scan):", this.answerKey);
-            console.log("➡️ typeof keyMap:", typeof keyMap);
-            console.log("➡️ Keys:", Object.keys(keyMap));
-          },
-          error: (err) => {
-            console.error("❌ Failed to load answer key", err);
-          }
-        });
-      });
-      // ✅ Start camera only once here
-      this.onStartCameraButtonClick();
-    }
+async ngAfterViewInit() {
+  await this.waitForVideoElement();
+  await this.waitForOpenCV();
+
+  // Load classId + subjectId from params
+  this.route.queryParams.subscribe(params => {
+    this.classId = Number(params['classId']);
+    this.subjectId = Number(params['subjectId']);
+
+    // Optional: preload scans
+    this.scanService.getScans(this.classId, this.subjectId).subscribe({
+      next: (scans) => {
+        console.log("✅ Loaded scans:", scans);
+      },
+      error: (err) => {
+        console.error("❌ Failed to load scans", err);
+      }
+    });
+
+    // Load TOS
+    this.http.get<any[]>(`https://capstone-wwbm.onrender.com/subjects/${this.classId}/${this.subjectId}/tos`).subscribe({
+      next: (tos: any[]) => {
+        this.tosRows = tos;
+      },
+      error: (err) => {
+        console.error("❌ Failed to load TOS", err);
+        this.tosRows = [];
+      }
+    });
+
+   // ✅ Load Answer Key once
+   this.answerKeyService.getAnswerKey(this.classId, this.subjectId).subscribe(keyRows => {
+    this.answerKey = {}; // reset
+    keyRows.forEach((row: any) => {
+      console.log("🔎 Raw row from DB:", row);
+
+      // ✅ Flexible property mapping
+      const qNum = row.question || row.question_number || row.questionNumber;
+      const correct = row.correctAnswer || row.correct_answer || row.correctAnswer;
+
+      if (qNum && correct) {
+        this.answerKey[qNum] = correct;
+      }
+    });
+
+    this.total = Object.keys(this.answerKey).length;
+    console.log("✅ Final AnswerKey Map:", this.answerKey);
+  });
+  });
+
+  // ✅ Start camera after everything is prepared
+  this.onStartCameraButtonClick();
+}
 
  private async waitForOpenCV(): Promise<void> {
   while (!(window as any).cv || !(window as any).cv.Mat) {
