@@ -336,14 +336,21 @@ computeCompetencyBreakdown() {
     for (let i = 0; i < items; i++) {
       this.analysisResults.forEach(r => {
         const ans = r.answers.find(a => a.question === questionIndex);
-        if (ans) {
-          this.competencyBreakdown[key].total++;
-          if (ans.correct) this.competencyBreakdown[key].correct++;
-        }
+
+        // ✅ Always count the question (answered or not)
+        this.competencyBreakdown[key].total++;
+          if (ans) {
+            console.log(`✅ Found answer: student=${r.id}, question=${questionIndex}, correct=${ans.correct}`);
+            if (ans.correct) {
+              this.competencyBreakdown[key].correct++;
+            }
+          }
       });
+
       questionIndex++;
     }
   }
+  console.log("📊 Final competencyBreakdown:", this.competencyBreakdown);
 }
 
 renderAggregatedAnswerChart() {
