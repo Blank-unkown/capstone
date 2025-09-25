@@ -46,8 +46,8 @@
           <ul>
             <li *ngFor="let q of row.questions">
               Q{{ q.question }} → Selected: {{ q.marked }} | Correct: {{ q.correctAnswer }}
-              <span [style.color]="q.isCorrect ? 'green' : 'red'">
-                ({{ q.isCorrect ? '✔' : '✘' }})
+              <span [style.color]="q.correct ? 'green' : 'red'">
+                ({{ q.correct ? '✔' : '✘' }})
               </span>
             </li>
           </ul>

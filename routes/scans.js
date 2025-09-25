@@ -205,4 +205,31 @@ router.get("/:classId/:subjectId/scans/:scanId", async (req, res) => {
   }
 });
 
+/**
+ * 📌 Delete a scan (and its answers)
+ */
+router.delete("/:classId/:subjectId/scans/:scanId", async (req, res) => {
+  const { classId, subjectId, scanId } = req.params;
+
+  try {
+    // 1) Delete answers first (to avoid foreign key constraint issues)
+    await db.query("DELETE FROM scan_answers WHERE scan_id = ?", [scanId]);
+
+    // 2) Delete scan itself
+    const [result] = await db.query(
+      "DELETE FROM scans WHERE id = ? AND class_id = ? AND subject_id = ?",
+      [scanId, classId, subjectId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Scan not found" });
+    }
+
+    res.json({ message: "✅ Scan deleted successfully", scanId });
+  } catch (err) {
+    console.error("❌ Error deleting scan:", err);
+    res.status(500).json({ error: "Failed to delete scan", details: err.message });
+  }
+});
+
 module.exports = router;

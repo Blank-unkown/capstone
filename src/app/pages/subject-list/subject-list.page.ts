@@ -193,16 +193,14 @@ goToScannedResults(subjectId: number) {
   }
 // -----------------------------
 // deleteScan: remove from both arrays if present, then refresh analysis
-deleteScan(resultId: number) {
+deleteScan(scanId: number) {
   if (!confirm('Are you sure you want to delete this scanned result?')) return;
 
-  fetch(`https://capstone-wwbm.onrender.com/scans/${resultId}`, { method: 'DELETE' })
-    .then(res => {
-      if (!res.ok) throw new Error('Failed to delete scan');
-
+  this.scanService.deleteScan(this.classId, this.subjectId, scanId).subscribe({
+    next: () => {
       // Remove locally from rawScans and analysisResults
-      this.rawScans = this.rawScans.filter(r => r.id !== resultId);
-      this.analysisResults = this.analysisResults.filter(r => r.id !== resultId);
+      this.rawScans = this.rawScans.filter(r => r.id !== scanId);
+      this.analysisResults = this.analysisResults.filter(r => r.id !== scanId);
 
       // Recompute distribution and charts
       this.computeDistribution();
@@ -213,13 +211,15 @@ deleteScan(resultId: number) {
         this.renderCompetencyChart();
       }, 0);
 
-    })
-    .catch(err => {
+      alert('✅ Scan deleted successfully');
+    },
+    error: (err) => {
       console.error('Error deleting scan:', err);
-      alert('Failed to delete scan');
-    });
+      alert('❌ Failed to delete scan');
+    }
+  });
 }
-// 🔹 View a single scan
+
 // 🔹 View a single scan
 viewScan(scan: any) {
   console.log("🧭 Navigating with:", scan);
