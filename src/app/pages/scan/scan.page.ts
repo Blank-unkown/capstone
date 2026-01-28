@@ -349,7 +349,16 @@ private initOpenCVMatsAndCapture(videoEl: HTMLVideoElement) {
 
       cv.cvtColor(src, gray, cv.COLOR_BGR2GRAY);
       cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-      cv.threshold(blurred, edges, 60, 255, cv.THRESH_BINARY_INV);
+      cv.adaptiveThreshold(
+        blurred,
+        edges,
+        255,
+        cv.ADAPTIVE_THRESH_MEAN_C, // or cv.ADAPTIVE_THRESH_GAUSSIAN_C
+        cv.THRESH_BINARY_INV,
+        15, // block size (try 11–21, must be odd)
+        5   // constant (tune 2–7)
+      );
+
       cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
       let detectedBoxes = new Array(this.detectionBoxes.length).fill(false);
@@ -359,33 +368,37 @@ private initOpenCVMatsAndCapture(videoEl: HTMLVideoElement) {
         const approx = new cv.Mat();
         cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
 
-        if (
-          approx.rows === 4 &&
-          cv.isContourConvex(approx) &&
-          cv.contourArea(approx) > 300 &&  // min size
-          cv.contourArea(approx) < 3000    // max size
-        ) {
-          const rect = cv.boundingRect(approx);
+        if (approx.rows === 4 && cv.isContourConvex(approx)) {
+  const area = cv.contourArea(approx);
 
-          this.detectionBoxes.forEach((box, idx) => {
-            if (
-              rect.x >= box.x &&
-              rect.y >= box.y &&
-              rect.x + rect.width <= box.x + box.width &&
-              rect.y + rect.height <= box.y + box.height
-            ) {
-              detectedBoxes[idx] = true;
-              ctx.save();
-              ctx.strokeStyle = 'red';
-              ctx.lineWidth = 4;
-              ctx.globalAlpha = 0.7;
-              ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-              ctx.fillStyle = 'rgba(255,0,0,0.2)';
-              ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-              ctx.restore();
-            }
-          });
+  // ✅ Looser area range for live preview (more tolerant)
+  if (area > 100 && area < 20000) {
+    const rect = cv.boundingRect(approx);
+    const aspect = rect.width / rect.height;
+
+    // ✅ Loose aspect ratio filter (to reject elongated shadows)
+    if (aspect > 0.6 && aspect < 1.4) {
+      this.detectionBoxes.forEach((box, idx) => {
+        if (
+          rect.x >= box.x &&
+          rect.y >= box.y &&
+          rect.x + rect.width <= box.x + box.width &&
+          rect.y + rect.height <= box.y + box.height
+        ) {
+          detectedBoxes[idx] = true;
+          ctx.save();
+          ctx.strokeStyle = 'red';
+          ctx.lineWidth = 4;
+          ctx.globalAlpha = 0.7;
+          ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+          ctx.fillStyle = 'rgba(255,0,0,0.2)';
+          ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+          ctx.restore();
         }
+      });
+    }
+  }
+}
         approx.delete();
         cnt.delete();
       }
@@ -457,7 +470,16 @@ async detectAndCropPaper() {
       const roi = gray.roi(new cv.Rect(box.x, box.y, box.width, box.height));
       const roiContours = new cv.MatVector();
       const roiHierarchy = new cv.Mat();
-      cv.threshold(roi, roi, 90, 255, cv.THRESH_BINARY_INV);
+      cv.adaptiveThreshold(
+        roi,
+        roi,
+        255,
+        cv.ADAPTIVE_THRESH_MEAN_C,
+        cv.THRESH_BINARY_INV,
+        15,
+        5
+      );
+
       cv.findContours(roi, roiContours, roiHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
       let maxArea = 0;
@@ -470,12 +492,20 @@ async detectAndCropPaper() {
 
         if (approx.rows === 4 && cv.isContourConvex(approx)) {
           const area = cv.contourArea(approx);
-          if (area > 300 && area < 3000 && area > maxArea) {
-            maxArea = area;
-            bestQuad = [];
-            for (let j = 0; j < 4; j++) {
-              const pt = approx.data32S.slice(j * 2, j * 2 + 2);
-              bestQuad.push({ x: pt[0] + box.x, y: pt[1] + box.y });
+
+          // ✅ Use tighter but tolerant area range
+          if (area > 200 && area < 10000) {
+            const rect = cv.boundingRect(approx);
+            const aspect = rect.width / rect.height;
+
+            // ✅ Filter by aspect ratio to ignore elongated shapes (like shadows)
+            if (aspect > 0.7 && aspect < 1.3 && area > maxArea) {
+              maxArea = area;
+              bestQuad = [];
+              for (let j = 0; j < 4; j++) {
+                const pt = approx.data32S.slice(j * 2, j * 2 + 2);
+                bestQuad.push({ x: pt[0] + box.x, y: pt[1] + box.y });
+              }
             }
           }
         }
@@ -495,7 +525,11 @@ async detectAndCropPaper() {
           const dist = Math.hypot(pt.x - target.x, pt.y - target.y);
           if (dist < minDist) { minDist = dist; chosen = pt; }
         }
-        markerCorners.push(chosen);
+        let moments = cv.moments(cnt);
+        let cx = moments.m10 / moments.m00 + box.x;
+        let cy = moments.m01 / moments.m00 + box.y;
+        markerCorners.push({ x: cx, y: cy });
+
       } else {
         markerCorners.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
       }
