@@ -452,7 +452,10 @@ onStartCameraButtonClick() {
           //     const stream = this.videoRef.nativeElement.srcObject as MediaStream;
           //     stream.getTracks().forEach(track => track.stop());
           // }
-          this.detectAndCropPaper();
+          const capturedFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          this.detectAndCropPaper(capturedFrame);
+
           return;
       }
 
@@ -475,7 +478,7 @@ onStartCameraButtonClick() {
     await alert.present();
   }
 
-  async detectAndCropPaper(): Promise<ScannedResult | null> {
+  async detectAndCropPaper(imageData: ImageData): Promise<ScannedResult | null> {
   const log = (...args: any[]) => console.log("[detectAndCropPaper]", ...args);
 
   try {
@@ -499,25 +502,49 @@ onStartCameraButtonClick() {
     alert(`📦 detectionBoxes count: ${this.detectionBoxes.length}`);
 
     // 🔹 Detect 4 corners
-    for (const [i, box] of this.detectionBoxes.entries()) {
-      alert(`🔍 Processing detectionBox ${i + 1}`);
+    for (const [boxIndex, box] of this.detectionBoxes.entries()) {
+      alert(`🔍 Processing detectionBox ${boxIndex + 1}`);
       const roi = gray.roi(new cv.Rect(box.x, box.y, box.width, box.height));
       const roiContours = new cv.MatVector();
       const roiHierarchy = new cv.Mat();
-      cv.threshold(roi, roi, 90, 255, cv.THRESH_BINARY_INV);
-      cv.findContours(roi, roiContours, roiHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+
+      const thresh = new cv.Mat();
+      cv.adaptiveThreshold(
+        roi,
+        thresh,
+        255,
+        cv.ADAPTIVE_THRESH_MEAN_C,
+        cv.THRESH_BINARY_INV,
+        11,
+        2
+      );
+
+      cv.findContours(thresh, roiContours, roiHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      //cv.threshold(roi, roi, 90, 255, cv.THRESH_BINARY_INV);
+      //cv.findContours(roi, roiContours, roiHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
       let bestQuad: Array<{ x: number; y: number }> | null = null;
       let maxArea = 0;
 
-      for (let i = 0; i < roiContours.size(); i++) {
-        const cnt = roiContours.get(i);
+      for (let contourIndex = 0; contourIndex < roiContours.size(); contourIndex++) {
+        const cnt = roiContours.get(contourIndex);
         const approx = new cv.Mat();
         cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
 
-        if (approx.rows === 4 && cv.isContourConvex(approx)) {
+        if (approx.rows >= 4 && approx.rows <= 6 && cv.isContourConvex(approx)) {
+
+            const rect = cv.boundingRect(approx);
+            const ratio = rect.width / rect.height;
+
+            if (ratio < 0.6 || ratio > 1.4) {
+              approx.delete();
+              cnt.delete();
+              continue;
+            }
+
           const area = cv.contourArea(approx);
-          if (area > 300 && area < 3000 && area > maxArea) {
+          if (area > 100 && area < 3000 && area > maxArea) {
             maxArea = area;
             bestQuad = [];
             for (let j = 0; j < 4; j++) {
@@ -531,28 +558,53 @@ onStartCameraButtonClick() {
       }
 
       if (bestQuad) {
-        alert(`✅ Quad found in box ${i + 1}, area=${maxArea}`);
-        markerCorners.push(bestQuad[0]); // just pick one
+
+        alert(`✅ Quad found in box ${boxIndex + 1}, area=${maxArea}`);
+
+        const cx = bestQuad.reduce((sum, p) => sum + p.x, 0) / 4;
+        const cy = bestQuad.reduce((sum, p) => sum + p.y, 0) / 4;
+
+        markerCorners.push({ x: cx, y: cy });
+
       } else {
-        alert(`⚠️ No quad in box ${i + 1}, using fallback center`);
-        markerCorners.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
+        alert(`⚠️ No quad in box ${boxIndex + 1} — restarting scan`);
+
+        roi.delete();
+        roiContours.delete();
+        roiHierarchy.delete();
+        thresh.delete();
+
+        src.delete();
+        gray.delete();
+
+        return null; // return to processVideo
       }
 
       roi.delete();
       roiContours.delete();
       roiHierarchy.delete();
+      thresh.delete();
     }
     gray.delete();
 
     if (markerCorners.length !== 4) throw new Error("Expected 4 corners, got " + markerCorners.length);
     alert("✅ Found 4 corners, ordering...");
+    const sum = markerCorners.map(p => p.x + p.y);
+    const diff = markerCorners.map(p => p.x - p.y);
 
+    const ordered = [
+      markerCorners[sum.indexOf(Math.min(...sum))], // top-left
+      markerCorners[diff.indexOf(Math.max(...diff))], // top-right
+      markerCorners[sum.indexOf(Math.max(...sum))], // bottom-right
+      markerCorners[diff.indexOf(Math.min(...diff))] // bottom-left
+    ];
     // 🔹 Order corners (TL, TR, BR, BL)
-    markerCorners.sort((a, b) => a.y - b.y);
+    /*markerCorners.sort((a, b) => a.y - b.y);
     const top = markerCorners.slice(0, 2).sort((a, b) => a.x - b.x);
     const bottom = markerCorners.slice(2, 4).sort((a, b) => a.x - b.x);
     const ordered = [top[0], top[1], bottom[1], bottom[0]];
-
+*/
     const FIXED_WIDTH = 800;
     const FIXED_HEIGHT = Math.round(800 * 1.414);
     alert(`📐 Perspective target size: ${FIXED_WIDTH}x${FIXED_HEIGHT}`);
@@ -652,10 +704,19 @@ onStartCameraButtonClick() {
     return result;
 
   } catch (err: any) {
-    this.presentAlert("Error", "detectAndCropPaper failed: " + err.message);
-    alert("❌ detectAndCropPaper failed: " + err.message);
-    return null;
-  }
+  console.error("detectAndCropPaper error:", err);
+
+  const msg =
+    err?.message ||
+    err?.toString() ||
+    JSON.stringify(err) ||
+    "Unknown error";
+
+  this.presentAlert("Error", "detectAndCropPaper failed: " + msg);
+  alert("❌ detectAndCropPaper failed: " + msg);
+
+  return null;
+}
 }
 
 // 🔹 Convert Base64 → Blob

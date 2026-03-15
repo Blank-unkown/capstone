@@ -2,7 +2,125 @@ ion-label {
   font-size: 14px;
   margin-bottom: 4px;
 }
-
 ion-textarea {
   font-size: 14px;
+}
+/* ================= NORMAL SCREEN VIEW ================= */
+ion-card {
+  max-width: 900px;
+  margin: auto;
+}
+/* ================= EXAM PAPER CONTAINER ================= */
+.exam-paper {
+  background: white;
+  color: black;
+  padding: 40px;
+  max-width: 850px;
+  margin: auto;
+  font-family: Arial, sans-serif;
+  /* SCREEN ZOOM OUT ONLY */
+  transform: scale(0.85);
+  transform-origin: top center;
+}
+/* ================= TEXT ALIGN ================= */
+.center {
+  text-align: center;
+}
+/* ================= HEADER ================= */
+.exam-header {
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+/* ================= QUESTIONS CONTAINER ================= */
+/* THIS is where columns happen — NOT exam-paper */
+.exam-questions {
+  column-count: 2;
+  column-gap: 35px;
+}
+/* ================= QUESTION BLOCK ================= */
+.question-block {
+  margin-bottom: 18px;
+  break-inside: avoid;
+}
+.question-text {
+  font-weight: bold;
+}
+.choices {
+  margin-left: 20px;
+}
+/* ================= PAGE BREAK (SCREEN) ================= */
+/* Visible dashed line on screen so you see next page */
+.page-break {
+  height: 40px;
+  border-top: 2px dashed #999;
+  margin: 25px 0;
+}
+/* ================= PRINT MODE ================= */
+@media print {
+  ion-header,
+  ion-toolbar,
+  ion-button,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .exam-paper {
+  transform: none; /* remove scale */
+  margin: 0;
+  padding: 10mm;
+  max-width: 100%;
+}
+  //.exam-paper {
+   // margin: 0;
+   // padding: 10mm;
+   // max-width: none;
+  //  width: 100%;
+
+    /* CRITICAL — NO SCALE IN PRINT */
+    //  transform: scale(0.85);
+ // transform-origin: top center;
+ // }
+  /* Columns ONLY for questions */
+  .exam-questions {
+    column-count: 2;
+    column-gap: 25px;
+  }
+  .page-break {
+    display: none;
+  }
+
+  @media print {
+    .page-break {
+      display: block;
+      page-break-after: always;
+      break-after: page;
+    }
+  //.question-block {
+  //  break-inside: avoid;
+  //}
+
+  /* PAGE BREAK (PRINT) */
+  //.page-break {
+    //display: block;
+    //height: 1px;
+    //page-break-after: always;
+    //break-after: page;
+  //}
+}
+/* ================= PAPER SIZE ================= */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+.print-container {
+  transform: scale(0.85);
+}
+.tos-preview {
+  margin-bottom: 20px;
+}
+.tos-preview ion-card {
+  border-left: 5px solid #3880ff;
+}
 }

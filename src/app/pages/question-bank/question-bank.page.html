@@ -1,0 +1,141 @@
+<ion-buttons slot="start">
+  <ion-back-button defaultHref="/dashboard"></ion-back-button>
+</ion-buttons>
+
+<ion-content class="ion-padding">
+  <h2 class="center">Question Bank</h2>
+
+  <!-- ================= ADD / EDIT FORM ================= -->
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>
+        {{ editingIndex !== null ? 'Edit Question' : 'Add New Question' }}
+      </ion-card-title>
+    </ion-card-header>
+
+    <ion-card-content>
+
+      <!-- TOS ROW SELECT -->
+      <ion-item>
+        <div *ngIf="form.tosId" class="ion-padding">
+          <strong>Questions in this row:</strong>
+          {{ selectedRowCount }} / {{ selectedRowExpected }}
+        </div>
+
+        <ion-label position="stacked">TOS Row</ion-label>
+
+        <ion-select [(ngModel)]="form.tosId" (ionChange)="onTosChange()">
+          <ion-select-option
+            *ngFor="let row of tos"
+            [value]="row.id">
+            {{ row.topicName }} – {{ row.learningCompetency }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- QUESTION TEXT -->
+      <ion-item>
+        <ion-label position="stacked">Question</ion-label>
+        <ion-textarea [(ngModel)]="form.questionText"></ion-textarea>
+      </ion-item>
+
+      <!-- CHOICES -->
+      <ion-item *ngFor="let key of choiceKeys">
+        <ion-label position="stacked">Choice {{ key }}</ion-label>
+        <ion-input [(ngModel)]="form.choices[key]"></ion-input>
+      </ion-item>
+
+      <!-- CORRECT ANSWER -->
+      <ion-item>
+        <ion-label position="stacked">Correct Answer</ion-label>
+        <ion-select [(ngModel)]="form.correctAnswer">
+          <ion-select-option *ngFor="let key of choiceKeys" [value]="key">
+            {{ key }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- ACTIONS -->
+      <ion-button expand="block" color="primary" (click)="submitQuestion()">
+        {{ editingIndex !== null ? 'Update Question' : 'Save Question' }}
+      </ion-button>
+
+      <ion-button
+        expand="block"
+        fill="outline"
+        color="medium"
+        *ngIf="editingIndex !== null"
+        (click)="resetForm()">
+        Cancel
+      </ion-button>
+
+    </ion-card-content>
+  </ion-card>
+
+  <!-- ================= QUESTION LIST ================= -->
+  <ion-card *ngFor="let q of questions; let i = index">
+
+    <ion-card-content>
+
+      <p><strong>{{ q.questionText }}</strong></p>
+      <p>A.) {{ q.choices.A }}</p>
+      <p>B.) {{ q.choices.B }}</p>
+      <p>C.) {{ q.choices.C }}</p>
+      <p>D.) {{ q.choices.D }}</p>
+
+      <!-- EXISTING COGNITIVE INFO -->
+      <p *ngIf="q.mainCognitive">
+        <strong>Main Cognitive:</strong>
+        {{ q.mainCognitive | titlecase }}
+      </p>
+
+      <p *ngIf="q.cognitives?.length">
+        <strong>Cognitive Distribution:</strong>
+        <span *ngFor="let c of q.cognitives; let last = last">
+          {{ c.key | titlecase }} ({{ c.value }})<span *ngIf="!last">, </span>
+        </span>
+      </p>
+
+      <!-- OPTIONAL: SET / CHANGE MAIN COGNITIVE (PER QUESTION) -->
+      <ion-item *ngIf="q.cognitives?.length">
+        <ion-label position="stacked">Set Main Cognitive (optional)</ion-label>
+
+        <ion-select
+          [(ngModel)]="q.mainCognitive"
+          (ionChange)="updateMainCognitive(q)"
+          placeholder="Select main cognitive">
+
+          <ion-select-option
+            *ngFor="let c of q.cognitives"
+            [value]="c.key">
+            {{ c.key | titlecase }} ({{ c.value }})
+          </ion-select-option>
+
+        </ion-select>
+      </ion-item>
+
+      <!-- DEV / MAINTENANCE 
+      <ion-button color="secondary" (click)="repairQuestions()">
+        🔧 Repair Question Links
+      </ion-button>
+
+      <ion-button
+        expand="block"
+        color="tertiary"
+        (click)="generateSampleForCurrentTOS()">
+        ⚡ Generate Sample Questions (Dev)
+      </ion-button>
+-->
+      <!-- CRUD -->
+      <ion-button size="small" color="warning" (click)="editQuestion(q, i)">
+        Edit
+      </ion-button>
+
+      <ion-button size="small" color="danger" (click)="deleteQuestion(i)">
+        Delete
+      </ion-button>
+
+    </ion-card-content>
+  </ion-card>
+
+</ion-content>

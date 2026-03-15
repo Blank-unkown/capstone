@@ -47,6 +47,10 @@ const routes: Routes = [
   path: 'answer-key/:classId/:subjectId',
   loadChildren: () => import('./pages/answer-key/answer-key.module').then(m => m.AnswerKeyPageModule)
   },
+  {
+    path: 'question-bank/:classId/:subjectId',
+    loadChildren: () => import('./pages/question-bank/question-bank.module').then( m => m.QuestionBankPageModule)
+  },
 ];
 
 @NgModule({

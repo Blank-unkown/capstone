@@ -1,27 +1,186 @@
-<ion-header>
-  <ion-toolbar>
     <ion-buttons slot="start">
-      <ion-back-button defaultHref="/tos/{{ classId }}/{{ subjectId }}"></ion-back-button>
+      <ion-back-button defaultHref="/dashboard"></ion-back-button>
     </ion-buttons>
-    <ion-title>Generated Questions</ion-title>
-  </ion-toolbar>
-</ion-header>
-
 <ion-content class="ion-padding">
-  <h2>{{ className }} - {{ subjectName }}</h2>
 
-  <ion-list>
-    <ion-item *ngFor="let q of questions; let i = index">
-      <ion-label position="stacked">
-        <strong>Topic:</strong> {{ q.topic }}<br>
-        <strong>Competency:</strong> {{ q.competency }}<br>
-        <strong>Cognitive Level:</strong> {{ q.level }}
-      </ion-label>
-      <ion-textarea [(ngModel)]="questions[i].question"></ion-textarea>
-    </ion-item>
-  </ion-list>
+  <!-- MODE SWITCHER -->
+  <ion-segment [(ngModel)]="viewMode" class="no-print">
 
-  <ion-button expand="block" color="success" (click)="saveQuestions()">
-    Save All Questions
+    <ion-segment-button value="preview">Preview</ion-segment-button>
+    <ion-segment-button value="edit">Edit</ion-segment-button>
+    <ion-segment-button value="print">Print</ion-segment-button>
+  </ion-segment>
+
+  <!-- TOS PREVIEW SUMMARY -->
+<div class="tos-preview" *ngIf="viewMode !== 'preview'">
+
+  <ion-card *ngFor="let row of generatedExam.rows">
+
+    <ion-card-header>
+      <ion-card-title>
+        {{ row.topic }} – {{ row.competency }}
+      </ion-card-title>
+    </ion-card-header>
+
+    <ion-card-content>
+
+      <p>
+        <strong>Questions:</strong>
+        {{ row.start }} – {{ row.end }}
+      </p>
+
+      <p>
+        R: {{ row.remembering }} |
+        U: {{ row.understanding }} |
+        Ap: {{ row.applying }} |
+        An: {{ row.analyzing }} |
+        Ev: {{ row.evaluating }} |
+        Cr: {{ row.creating }}
+      </p>
+
+      <p>
+        Expected: {{ row.expected }}
+        |
+        Generated: {{ row.generated }}
+      </p>
+
+    </ion-card-content>
+
+  </ion-card>
+
+</div>
+
+  <!-- ================= PREVIEW MODE ================= -->
+  <div *ngIf="viewMode === 'preview' && generatedExam">
+
+    <div *ngFor="let page of generatedExam.pages; let pIndex = index" class="exam-paper">
+
+      <!--<h2 class="center">EXAMINATION</h2>-->
+
+      <!-- <div class="exam-header">--
+        <p>
+          Name: ____________________________ <br>
+          Class: {{ generatedExam.className }} <br>
+          Subject: {{ generatedExam.subjectName }}
+        </p>
+      </div>  
+      <hr />-->
+
+      <div class="exam-questions">
+
+        <h2 class="center">EXAMINATION</h2>
+
+        <div class="exam-header">
+          <p>
+            Name: ____________________________ <br>
+            Class: {{ generatedExam.className }} <br>
+            Subject: {{ generatedExam.subjectName }}
+          </p>
+        </div>
+
+        <div *ngFor="let q of page" class="question-block">
+          <p class="question-text">
+            {{ q.examNo }}.) {{ q.questionText }}
+          </p>
+
+          <div class="choices">
+            <p>a.) {{ q.choices.A }}</p>
+            <p>b.) {{ q.choices.B }}</p>
+            <p>c.) {{ q.choices.C }}</p>
+            <p>d.) {{ q.choices.D }}</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- PAGE BREAK BETWEEN PAGES -->
+      <div class="page-break" *ngIf="pIndex < generatedExam.pages.length - 1"></div>
+
+    </div>
+
+  </div>
+
+
+  <!-- ================= EDIT MODE ================= -->
+  <div *ngIf="viewMode === 'edit' && generatedExam">
+
+    <ion-card *ngFor="let q of questions">
+      <ion-card-header>
+        <ion-card-title>Question {{ q.examNo }}</ion-card-title>
+      </ion-card-header>
+
+      <ion-card-content>
+
+        <ion-item>
+          <ion-label position="stacked">Question Text</ion-label>
+          <ion-textarea [(ngModel)]="q.questionText"></ion-textarea>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Choice A</ion-label>
+          <ion-input [(ngModel)]="q.choices.A"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Choice B</ion-label>
+          <ion-input [(ngModel)]="q.choices.B"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Choice C</ion-label>
+          <ion-input [(ngModel)]="q.choices.C"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Choice D</ion-label>
+          <ion-input [(ngModel)]="q.choices.D"></ion-input>
+        </ion-item>
+
+      </ion-card-content>
+    </ion-card>
+
+  </div>
+
+
+  <!-- ================= PRINT MODE ================= -->
+   
+  <!-- PRINT BUTTON -->
+  <ion-button expand="block" color="primary" (click)="printExam()" class="no-print">
+    🖨️ Print Exam
   </ion-button>
+
+  <div *ngIf="viewMode === 'print' && generatedExam">
+
+    <div *ngFor="let page of generatedExam.pages; let pIndex = index" class="exam-paper">
+
+      <h2 class="center">EXAMINATION</h2>
+
+      <div class="exam-header">
+        <p>
+          Name: ____________________________ <br>
+          Class: {{ generatedExam.className }} <br>
+          Subject: {{ generatedExam.subjectName }}
+        </p>
+      </div>
+
+      <div *ngFor="let q of page" class="question-block">
+        <p class="question-text">
+          {{ q.examNo }}.) {{ q.questionText }}
+        </p>
+
+        <div class="choices">
+          <p>a.) {{ q.choices.A }}</p>
+          <p>b.) {{ q.choices.B }}</p>
+          <p>c.) {{ q.choices.C }}</p>
+          <p>d.) {{ q.choices.D }}</p>
+        </div>
+      </div>
+
+      <!-- PAGE BREAK BETWEEN PAGES -->
+      <div class="page-break" *ngIf="pIndex < generatedExam.pages.length - 1"></div>
+
+    </div>
+
+  </div>
+
 </ion-content>

@@ -8,9 +8,13 @@ import { HttpClientModule } from '@angular/common/http';
 import { AuthService } from './services/auth.service'; // Adjust based on your actual file structure
 
 @NgModule({
-  declarations: [AppComponent], // ✅ Make sure AppComponent is here
-  imports: [BrowserModule, IonicModule.forRoot(), AppRoutingModule,  HttpClientModule ],
-  providers: [ AuthService, { provide: RouteReuseStrategy, useClass: IonicRouteStrategy }],
-  bootstrap: [AppComponent], // ✅ Ensure AppComponent is bootstrapped
+  bootstrap: [AppComponent],
+  imports: [
+    BrowserModule,
+    IonicModule.forRoot(),
+    AppRoutingModule,
+    HttpClientModule
+  ],
+  providers: [AuthService, { provide: RouteReuseStrategy, useClass: IonicRouteStrategy }]
 })
 export class AppModule {}

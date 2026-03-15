@@ -3,12 +3,17 @@ import { LocalDataService } from './services/local-data.service';
 import { Platform } from '@ionic/angular';
 import { PreloaderService } from './services/preloader.service';
 import { CameraService } from './services/camera.service';
+import { CommonModule } from '@angular/common';
+import { IonicModule, MenuController, NavController } from '@ionic/angular';
+import { RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
   styleUrls: ['app.component.scss'],
-  standalone: false,
+  imports: [CommonModule, FormsModule, IonicModule, RouterModule],
+  standalone: true,
 })
 export class AppComponent {
   constructor(
